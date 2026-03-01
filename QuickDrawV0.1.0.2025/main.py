@@ -10,7 +10,7 @@ pygame.init()
 class Game():
     def __init__(self, load_data = None):
 
-        self.game_container = Container(x = 25, y=20, width=SCREEN_WIDTH-375, height=SCREEN_HEIGHT-40, color=(255, 255, 255))
+        self.game_container = Container(x = 25, y=20, width=SC_W-375, height=SC_H-40, color=(255, 255, 255))
         self.gm_containerx, self.gm_containery = 25 + self.game_container.width, 20 + self.game_container.height
         self.randx = random.randint(
             25,
@@ -21,7 +21,7 @@ class Game():
             20,
             20 + self.game_container.height - 50
         )
-        self.upgrade_container = Container(x = SCREEN_WIDTH-325, y=SCREEN_HEIGHT-(SCREEN_HEIGHT-130), width=300, height=SCREEN_HEIGHT-150, color=(255, 255, 255))
+        self.upgrade_container = Container(x = SC_W-325, y=SC_H-(SC_H-130), width=300, height=SC_H-150, color=(255, 255, 255))
 
 
         if load_data:
@@ -124,7 +124,7 @@ def load_records():
 
 def menu(events):
     menu_items = ["New Game","Load Game", "Settings", "Credits", "Quit"]
-    container = Container(x=(SCREEN_WIDTH//2) + 100, y=(SCREEN_HEIGHT//2)-300, width=500, height=600, color=(255, 255, 255))
+    container = Container(x=(SC_W//2) + 100, y=(SC_H//2)-300, width=500, height=600, color=(255, 255, 255))
     container.draw_rect(screen)
 
     buttons = []
@@ -184,8 +184,8 @@ def pause_game(screen, snapshot):
     bttns = []
     pause = True
     pause_screen = Container(
-        x=(SCREEN_WIDTH // 2)-300,
-        y=(SCREEN_HEIGHT // 2)-100,
+        x=(SC_W // 2)-300,
+        y=(SC_H // 2)-100,
         width=600,
         height=200,
         color= WHITE

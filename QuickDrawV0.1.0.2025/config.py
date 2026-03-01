@@ -5,58 +5,15 @@ import random
 import json
 from cryptography.fernet import Fernet
 from pathlib import Path
+import hashlib
 
-
+# === DIR ====
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
 
 DATA_DIR.mkdir(exist_ok=True)
 ASSETS_DIR.mkdir(exist_ok=True)
-
-class Serializable:
-    def to_dict(self):
-        data = {}
-        for key, value in self.__dict__.items():
-            if key.startswith("_") or callable(value):
-                continue
-            if isinstance(value, pygame.Rect):
-                data[key] = [value.x, value.y, value.width, value.height]
-            elif isinstance(value, pygame.Vector2):
-                data[key] = [value.x, value.y]
-            elif isinstance(value, pygame.Color):
-                data[key] = list(value)
-            elif isinstance(value, set):
-                data[key] = list(value)
-            elif isinstance(value, (list, tuple)) and all(isinstance(i, pygame.Vector2) for i in value):
-                data[key] = [[i.x, i.y] for i in value]
-            elif isinstance(value, list) and value and hasattr(value[0], "to_dict"):
-                data[key] = [v.to_dict() for v in value]
-            else:
-                data[key] = value
-        return data
-
-    @classmethod
-    def from_dict(cls, data):
-        obj = cls.__new__(cls)  # create an uninitialized instance
-        for key, value in data.items():
-            if isinstance(value, list):
-                # Heuristics to detect type from list structure
-                if len(value) == 4 and all(isinstance(i, (int, float)) for i in value):
-                    setattr(obj, key, pygame.Rect(*value))
-                elif len(value) == 2 and all(isinstance(i, (int, float)) for i in value):
-                    setattr(obj, key, pygame.Vector2(*value))
-                elif len(value) in (3, 4) and all(isinstance(i, int) for i in value):
-                    setattr(obj, key, pygame.Color(*value))
-                elif value and isinstance(value[0], list):  # List of vectors
-                    setattr(obj, key, [pygame.Vector2(*v) for v in value])
-                else:
-                    setattr(obj, key, value)
-            elif isinstance(value, list):  # Could be a set
-                setattr(obj, key, set(value))
-            else:
-                setattr(obj, key, value)
-        return obj
 
 
 # Function to get the correct path for assets
@@ -66,18 +23,19 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(__file__), relative_path)
 
-# Initialize pygame
+
+# === INIT ===
+
+# pygame init
 pygame.init()
 
-# Captions
-pygame.display.set_caption("Quick! DRAW!")
-
-# Load and set the window icon
+# Set Theme
+pygame.display.set_caption("Quick Draw: Outlaw Rush")
 icon_path = resource_path(ASSETS_DIR / "icon.png")
 icon = pygame.image.load(icon_path)  # Load icon image
 pygame.display.set_icon(icon)  # Set as window icon
 
-# Colors with Hue values (in degrees)
+# Set Colors
 WHITE = (255, 255, 255)  # No hue, neutral color
 BLACK = (0, 0, 0)  # No hue, neutral color
 RED = (255, 0, 0)  # Hue: 0°
@@ -95,23 +53,21 @@ LIGHT_GRAY = (211, 211, 211)  # Neutral
 DARK_GRAY = (64, 64, 64)  # Neutral
 DESERT = (193, 154, 107)  # Hue: ~30°
 
-# Fonts
+# Set Fonts
 FONT = pygame.font.Font(None, 50)
 FONT_PATH = resource_path(ASSETS_DIR / "WEST____.TTF")
 
+# Set Sfx
 # shoot = resource_path("assets/sound/gunshot.mp3")
 # buzzer = resource_path("assets/sound/buzzer.wav")
-
 # shoot_sound = pygame.mixer.Sound(shoot)  # Placeholder sound
 # buzzer_sound = pygame.mixer.Sound(buzzer) # Placeholder sound
 
 
-# Get desktop screen size
+# Set Screen
 info = pygame.display.Info()
-SCREEN_WIDTH, SCREEN_HEIGHT = info.current_w, info.current_h
-
-# Create a fullscreen window
-screen = pygame.display.set_mode((SCREEN_WIDTH , SCREEN_HEIGHT), pygame.FULLSCREEN)
+SC_W, SC_H = info.current_w, info.current_h
+screen = pygame.display.set_mode((SC_W , SC_H), pygame.FULLSCREEN)
 
 
 # World Building
@@ -147,11 +103,62 @@ def get_random_spawn_pos(game_container_rect, margin=200):
     return x, y
 
 
+# === SAVE and LOAD ===
+class Serializable:
+    def to_dict(self):
+        data = {}
+        for key, value in self.__dict__.items():
+            if key.startswith("_") or callable(value):
+                continue
+            if isinstance(value, pygame.Rect):
+                data[key] = {"___type___": "Rect", "value": [value.x, value.y, value.width, value.height]}
+            elif isinstance(value, pygame.Vector2):
+                data[key] = {"___type___": "Vector2", "value": [value.x, value.y]}
+            elif isinstance(value, pygame.Color):
+                data[key] = {"___type___": "Color", "value": list(value)}
+            elif isinstance(value, set):
+                data[key] = list(value)
+            elif isinstance(value, (list, tuple)) and all(isinstance(i, pygame.Vector2) for i in value):
+                data[key] = {"___type___": "VectorList", "value": [[i.x, i.y] for i in value]}
+            elif isinstance(value, list) and value and hasattr(value[0], "to_dict"):
+                data[key] = [v.to_dict() for v in value]
+            else:
+                data[key] = value
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls.__new__(cls)  # create an uninitialized instance
+        for key, value in data.items():
+            if isinstance(value, dict) and "___type___" in value:
+                if value["___type___"] == "Rect":
+                    setattr(obj, key, pygame.Rect(*value["value"]))
+                elif value["___type___"] == "Vector2":
+                    setattr(obj, key, pygame.Vector2(*value["value"]))
+                elif value["___type___"] == "Color":
+                    setattr(obj, key, pygame.Color(*value["value"]))
+                elif value["___type___"] == "VectorList":  # List of vectors
+                    setattr(obj, key, [pygame.Vector2(*v) for v in value["value"]])
+                else:
+                    setattr(obj, key, value)
+            elif key in ["color", "border_color"]:
+                # convert to pygame.Color if value is a list/tuple
+                if isinstance(value, (list, tuple)):
+                    setattr(obj, key, pygame.Color(*value))
+                else:
+                    setattr(obj, key, value)
+            elif isinstance(value, list):  # Could be a set
+                setattr(obj, key, set(value))
+            else:
+                setattr(obj, key, value)
+        return obj
+
 
 
 # save_util
 save_path = DATA_DIR / "savegame.dat"
 save_key = DATA_DIR / "savekey.key"
+
 
 class GameEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -171,9 +178,23 @@ def load_key():
 def encrypt_save(data, filename=save_path):
     key = load_key()
     fernet = Fernet(key)
-    encrypted = fernet.encrypt(json.dumps(data, cls=GameEncoder).encode())
+    # Step 2: Serialize data (player, spawner, items)
+    json_str = json.dumps(data, cls=GameEncoder)
+    # Step 3: Calculate hash
+    hash_digest = hashlib.sha256(json_str.encode()).hexdigest()
+    # Step 4: Create container dict
+    container = {
+        "hash": hash_digest,
+        "data": data
+    }
+    # Step 5: Serialize container
+    container_str = json.dumps(container)
+    # Step 6: Encrypt container string
+    encrypted = fernet.encrypt(container_str.encode())
+    
     with open(filename, "wb") as f:
         f.write(encrypted)
+
 
 def decrypt_load(filename=save_path):
     try:
@@ -184,13 +205,23 @@ def decrypt_load(filename=save_path):
             encrypted = f.read()
 
         decrypted = fernet.decrypt(encrypted)
-        decoded = decrypted.decode()
-        # print("✅ Game Data Loaded:", json.loads(decoded))
-        return json.loads(decoded)
+        container_str = decrypted.decode()
+
+        container = json.loads(container_str)
+        saved_hash = container.get("hash")
+        data = container.get("data")
+
+        # Recalculate hash on data
+        recalculated_hash = hashlib.sha256(json.dumps(data, cls=GameEncoder).encode()).hexdigest()
+
+        if saved_hash != recalculated_hash:
+            raise ValueError("Save data corrupted or tampered!")
+
+        return data
 
     except Exception as e:
         print(f"❌ Decryption/Loading failed: {e}")
-        raise  # let the outer function handle it
+        raise  # or return None if you want to handle silently
 
 
 if not os.path.exists(save_key):
@@ -202,10 +233,10 @@ def save_game_data(player, spawner, items_spawn):
         "spawners": spawner.to_dict(),
         "items": items_spawn.to_dict()
     }
+    print(save_data)
     encrypt_save(save_data)
     print("✅ Game saved!")
     return player, spawner, items_spawn
-
 
 def load_save_data(path=save_path):
     if not os.path.exists(path):
@@ -228,4 +259,5 @@ def load_save_data(path=save_path):
     except Exception as e:
         print(f"❌ Unexpected error during load: {e}", repr(e))
         return None
+
 
