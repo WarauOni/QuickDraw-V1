@@ -370,10 +370,6 @@ class Enemy(Serializable):
             self.acc = -direction * self.max_spd
 
         else:
-            # Stop movement
-            self.vel *= 0
-            self.acc *= 0
-
             # Shoot
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
