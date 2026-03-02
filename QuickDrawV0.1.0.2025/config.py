@@ -31,9 +31,9 @@ pygame.init()
 
 # Set Theme
 pygame.display.set_caption("Quick Draw: Outlaw Rush")
-icon_path = resource_path(ASSETS_DIR / "icon.png")
-icon = pygame.image.load(icon_path)  # Load icon image
-pygame.display.set_icon(icon)  # Set as window icon
+ICON_PATH = resource_path(ASSETS_DIR / "icon.png")
+ICON = pygame.image.load(ICON_PATH)  # Load icon image
+pygame.display.set_icon(ICON)  # Set as window icon
 
 # Set Colors
 WHITE = (255, 255, 255)  # No hue, neutral color
@@ -53,6 +53,19 @@ LIGHT_GRAY = (211, 211, 211)  # Neutral
 DARK_GRAY = (64, 64, 64)  # Neutral
 DESERT = (193, 154, 107)  # Hue: ~30°
 
+# Swaps Color
+def swap_color(surface, old_color, new_color):
+    surface = surface.copy()
+    width, height = surface.get_size()
+
+    for x in range(width):
+        for y in range(height):
+            current_color = surface.get_at((x, y))
+            if current_color[:3] == old_color:
+                surface.set_at((x, y), new_color)
+
+    return surface
+
 # Set Fonts
 FONT = pygame.font.Font(None, 50)
 FONT_PATH = resource_path(ASSETS_DIR / "WEST____.TTF")
@@ -65,42 +78,17 @@ FONT_PATH = resource_path(ASSETS_DIR / "WEST____.TTF")
 
 
 # Set Screen
-info = pygame.display.Info()
-SC_W, SC_H = info.current_w, info.current_h
-screen = pygame.display.set_mode((SC_W , SC_H), pygame.FULLSCREEN)
+INFO = pygame.display.Info()
+SC_W, SC_H = INFO.current_w, INFO.current_h
+SCREEN = pygame.display.set_mode((SC_W , SC_H), pygame.FULLSCREEN)
 
 
 # World Building
 WORLD_RADIUS = 500  # 5000x5000 world, radius = 2500
+WORLD_SIZE = 2500
 
 MAX_ENEMIES = 50
 SPAWN_INTERVAL = 1.0  # seconds
-
-
-def get_random_spawn_pos(game_container_rect, margin=200):
-    side = random.choice(["inside", "top", "bottom", "left", "right"])
-
-    if side == "inside":
-        x = random.randint(game_container_rect.left, game_container_rect.right)
-        y = random.randint(game_container_rect.top, game_container_rect.bottom)
-
-    elif side == "top":
-        x = random.randint(game_container_rect.left, game_container_rect.right)
-        y = game_container_rect.top - margin
-
-    elif side == "bottom":
-        x = random.randint(game_container_rect.left, game_container_rect.right)
-        y = game_container_rect.bottom + margin
-
-    elif side == "left":
-        x = game_container_rect.left - margin
-        y = random.randint(game_container_rect.top, game_container_rect.bottom)
-
-    elif side == "right":
-        x = game_container_rect.right + margin
-        y = random.randint(game_container_rect.top, game_container_rect.bottom)
-
-    return x, y
 
 
 # === SAVE and LOAD ===
@@ -152,7 +140,6 @@ class Serializable:
             else:
                 setattr(obj, key, value)
         return obj
-
 
 
 # save_util
@@ -261,3 +248,26 @@ def load_save_data(path=save_path):
         return None
 
 
+# === MAP ===
+class BaseMap:
+    def __init__(self, x, y, width, height, color, border_color=BLACK, border_size=3):
+        self.posx, self.posy = x, y
+        self.width, self.height = width, height
+        self.color = color
+        self.border_color = border_color
+        self.border_size = border_size
+
+    def draw(self):
+        raise NotImplementedError
+
+    def clamp_position(self, x, y, center_x, center_y):
+        raise NotImplementedError
+    
+class RectMap(BaseMap):
+    def __init__(self, x, y, width, height, color, border_color=BLACK, border_size=3):
+        super().__init__(x, y, width, height, color, border_color, border_size)
+        self.rect = pygame.Rect(x, y, width, height)
+
+    def draw(self):
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size*2, self.border_size*2))
+        pygame.draw.rect(SCREEN, self.color, self.rect)

@@ -9,15 +9,14 @@ class DifficultyManager(Serializable):
         self.interval = 300.0  # 5 minutes
         self.scale = 1.1       # 10%
 
-    def draw(self, screen, game_container_rect):
+    def draw(self):
         # Positioning
-        x, y = (game_container_rect.w // 2) - 100, game_container_rect.y + 10
+        x, y = SC_W//2 - 100, 10
         width, height = 200, 50
 
         # Draw background container
         time_container = Container(x=x, y=y, width=width, height=height, color=DESERT)
-        time_container.draw_rect(screen)
-
+        time_container.draw_rect(SCREEN)
 
         # Fonts
         font = pygame.font.Font(FONT_PATH, 36)
@@ -31,12 +30,12 @@ class DifficultyManager(Serializable):
         # Render text
         text_surface = font.render(time_text, True, BLACK)
         text_rect = text_surface.get_rect(center=(x + width // 2, y + height // 2))
-        screen.blit(text_surface, text_rect)
+        SCREEN.blit(text_surface, text_rect)
 
         # Optional: show difficulty level
         level_surface = font.render(f"Level {self.level}", True, BLACK)
         level_rect = level_surface.get_rect(midtop=(x + width // 2, y + height + 5))
-        screen.blit(level_surface, level_rect)
+        SCREEN.blit(level_surface, level_rect)
 
 
     def update(self, dt):
@@ -61,13 +60,13 @@ class Button:
         self.font_path = FONT_PATH
         self.font_size = font_size  # Font size
 
-    def draw(self, screen, hover=False):
+    def draw(self, hover=False):
         color = (255, 50, 50) if hover else self.color
         # Draw border (slightly bigger rectangle)
-        pygame.draw.rect(screen, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
 
         # Draw actual button
-        pygame.draw.rect(screen, color, self.rect, border_radius=8)
+        pygame.draw.rect(SCREEN, color, self.rect, border_radius=8)
 
         # Load font (custom or default)
         font = pygame.font.Font(self.font_path, self.font_size) if self.font_path else pygame.font.Font(None, self.font_size)
@@ -75,7 +74,7 @@ class Button:
         # Render text
         text_surface = font.render(self.text, True, self.text_color)
         text_rect = text_surface.get_rect(center=self.rect.center)
-        screen.blit(text_surface, text_rect)
+        SCREEN.blit(text_surface, text_rect)
 
     def is_clicked(self, pos):
         print("is_clicked")
@@ -91,17 +90,17 @@ class Container:
         self.border_color = border_color
         self.border_size = border_size
 
-    def draw_rect(self, screen, hover=False):
+    def draw_rect(self, hover=False):
         color = (255, 50, 50) if hover else self.color
-        pygame.draw.rect(screen, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
-        pygame.draw.rect(screen, color, self.rect, border_radius=8)
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+        pygame.draw.rect(SCREEN, color, self.rect, border_radius=8)
 
-    def draw_circle(self, screen, camera_offset, center_x, center_y):
-        pygame.draw.circle(screen, (255, 255, 255), (int(center_x), int(center_y)), WORLD_RADIUS)
-        pygame.draw.circle(screen, (255, 0, 0), (int(center_x), int(center_y)), WORLD_RADIUS, 5)
+    def draw_circle(self, camera_offset, center_x, center_y):
+        pygame.draw.circle(SCREEN, (255, 255, 255), (int(center_x), int(center_y)), WORLD_RADIUS)
+        pygame.draw.circle(SCREEN, (255, 0, 0), (int(center_x), int(center_y)), WORLD_RADIUS, 5)
 
-    def draw_opaque(self, screen, snapshot):
-        screen.blit(snapshot, (0, 0))
+    def draw_opaque(self, snapshot):
+        SCREEN.blit(snapshot, (0, 0))
         # Create transparent overlay surface
         overlay = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
 
@@ -109,10 +108,10 @@ class Container:
         overlay.fill(self.color)
 
         # Draw border if needed
-        pygame.draw.rect(screen, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
 
         # Blit overlay with transparency
-        screen.blit(overlay, (self.posx, self.posy))
+        SCREEN.blit(overlay, (self.posx, self.posy))
 
 class Bullet(Serializable):
     def __init__(self, x, y, target, dmg):
@@ -127,16 +126,17 @@ class Bullet(Serializable):
     def update(self, dt):
         self.pos += self.vel * dt
 
-    def draw(self, screen):
-        pygame.draw.circle(screen, (255, 50, 50), self.pos, self.radius)
+    def draw(self):
+        pygame.draw.circle(SCREEN, (255, 50, 50), self.pos, self.radius)
 
 
 
 class Player(Serializable):
     def __init__(self):
+        # === Stats ===
         self.max_ammo = 6
         self.num_of_bullets = self.max_ammo
-        self.dmg = 10
+        self.dmg = 100
         self.attk_spd = 2
         self.reload_spd = 1
         self.crit_rate = 0.1
@@ -150,24 +150,24 @@ class Player(Serializable):
         self.next_allowed_shot_time = pygame.time.get_ticks() +  300
         self.reload_finish_time = 0
 
-        self.mny_bnty = 10
+        self.mny_mod = 0
 
-    def draw(self, screen, game_container_rect):
+    def draw(self):
         # Positioning and sizes
         padding = 10
         container_w, container_h = 200, 50
 
         # Wallet container (bottom-left)
-        wallet_x = game_container_rect.x + padding
-        wallet_y = game_container_rect.y + padding
+        wallet_x = padding
+        wallet_y = padding
         wallet_container = Container(x=wallet_x, y=wallet_y, width=container_w, height=container_h, color=DESERT)
-        wallet_container.draw_rect(screen)
+        wallet_container.draw_rect(SCREEN)
 
         # Ammo container (top-left)
-        ammo_x = game_container_rect.x + padding
-        ammo_y = game_container_rect.h - container_h - padding 
+        ammo_x = padding
+        ammo_y = SC_H - container_h - padding 
         ammo_container = Container(x=ammo_x, y=ammo_y, width=container_w, height=container_h, color=DESERT)
-        ammo_container.draw_rect(screen)
+        ammo_container.draw_rect(SCREEN)
 
         # Fonts
         font = pygame.font.Font(FONT_PATH, 32)
@@ -176,14 +176,14 @@ class Player(Serializable):
         wallet = getattr(self, "wallet", 0)
         wallet_text = font.render(f"{wallet}$", True, BLACK)
         wallet_rect = wallet_text.get_rect(center=(wallet_x + container_w // 2, wallet_y + container_h // 2))
-        screen.blit(wallet_text, wallet_rect)
+        SCREEN.blit(wallet_text, wallet_rect)
 
         # --- Draw Ammo ---
         ammo = getattr(self, "max_ammo", 0)
         bullets = getattr(self, "num_of_bullets", 0)
         ammo_text = font.render(f"{bullets}/{ammo}", True, BLACK)
         ammo_rect = ammo_text.get_rect(center=(ammo_x + container_w // 2, ammo_y + container_h // 2))
-        screen.blit(ammo_text, ammo_rect)
+        SCREEN.blit(ammo_text, ammo_rect)
 
 
     def update(self, events):
@@ -235,24 +235,35 @@ class Player(Serializable):
         self.reloading = True
         self.reload_finish_time = pygame.time.get_ticks() + int(1000 / self.reload_spd)
 
+    def gain_reward(self, reward):
+        self.wallet += (reward + self.mny_mod)
+
 
 class Enemy(Serializable):
-    def __init__(self, x, y, e_type):
-        self.max_hp = 100
-        self.hp = max(0, self.max_hp)
-        self.dmg = 1
-        self.attk_spd = 1
-        self.crit_rate = 1
-        self.crit_dmg = 1
-        self.spd = 50
-        self.vel = pygame.Vector2(0, 0)
-        self.acc = pygame.Vector2(0, 0)
-        self.max_spd = self.spd
-        self.attack_timer = 0.0
-        self.rect = pygame.Rect(x, y, 50, 50)
+    def __init__(self, x, y, w, h, e_type):
+        # === Object ===
+        self.rect = pygame.Rect(x, y, w, h)
         self.color = RED
         self.destroyed = False
         self.behaviour_type = e_type
+
+        # === Stats ===
+        self.max_hp = 100
+        self.hp = self.max_hp
+        self.dmg = 1
+        self.attk_spd = 1
+        self.crit_rate = 0.1
+        self.crit_dmg = 0.1
+        self.reward = 10
+
+        # === Mov Stats ===
+        self.mov_spd = 50
+        self.vel = pygame.Vector2(0, 0)
+        self.acc = pygame.Vector2(0, 0)
+        self.max_spd = self.mov_spd
+
+
+        self.attack_timer = 0.0
         self.bullets = []
         self.visible = False  # enemy starts hidden
 
@@ -267,33 +278,31 @@ class Enemy(Serializable):
     def from_dict(cls, data):
         rect_data = data["rect"]  # [x, y, w, h]
         e_type = data["enemy_type"]
-        enemies = cls(rect_data[0], rect_data[1], e_type)
-
+        enemies = cls(*rect_data["value"], e_type)
         enemies.bullets = [
             Bullet.from_dict(b) for b in data["bullets"]
         ]
         return enemies
 
-    def draw(self, screen):
+    def draw(self):
         if self.destroyed:
             return
 
-        
-        if self.visible:
-            pygame.draw.rect(screen, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
 
-            if self.hp < self.max_hp:
-                # Health bar
-                hp_ratio = max(0, self.hp / self.max_hp)
-                bar_width = self.rect.width
-                bar_height = 6
-                bar_x = self.rect.x
-                bar_y = self.rect.y + self.rect.height + 10
+        pygame.draw.rect(SCREEN, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
 
-                pygame.draw.rect(screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-                pygame.draw.rect(screen, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
+        if self.hp < self.max_hp:
+            # Health bar
+            hp_ratio = max(0, self.hp / self.max_hp)
+            bar_width = self.rect.width
+            bar_height = 6
+            bar_x = self.rect.x
+            bar_y = self.rect.y + self.rect.height + 10
 
-    def update(self, package, dt, game_container_rect):
+            pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
+            pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
+
+    def update(self, package, dt):
         self.attack_timer += dt
 
         target_pos = pygame.Vector2(package.rect.center)
@@ -301,16 +310,10 @@ class Enemy(Serializable):
         direction = target_pos - pos
         distance = direction.length()
 
-        # If not yet visible, move towards the package
-        if not self.visible:
-            # Move in the direction of the package
-            if distance > 1:
-                direction.normalize_ip()
-                self.acc = direction * self.max_spd
-
-            # Check if enemy has entered the game container
-            if game_container_rect.contains(self.rect):
-                self.visible = True  # now it appears fully
+        # Move in the direction of the package
+        if distance > 1:
+            direction.normalize_ip()
+            self.acc = direction * self.max_spd
     
 
         """Run AI depending on enemy type."""
@@ -318,8 +321,10 @@ class Enemy(Serializable):
             self.behaviour_melee(package, dt)
         elif self.behaviour_type == "range":
             self.behaviour_range(package, dt)
+        elif self.behaviour_type == "bomber":
+            self.behaviour_bomb(package, dt)
         else:
-            self.behaviour_idle()
+            pass
 
         self.enemy_mov(dt)
 
@@ -353,6 +358,7 @@ class Enemy(Serializable):
         self.enemy_mov(dt)
 
     def behaviour_range(self, package, dt):
+
         target = pygame.Vector2(package.rect.center)
         pos = pygame.Vector2(self.rect.center)
         direction = target - pos
@@ -379,8 +385,32 @@ class Enemy(Serializable):
 
         self.enemy_mov(dt)
 
-    def behaviour_idle(self):
-        pass
+    def behaviour_bomb(self, package, dt):
+        target = pygame.Vector2(package.rect.center)
+        pos = pygame.Vector2(self.rect.center)
+        direction = target - pos
+        distance = direction.length()
+
+        DESIRED_RADIUS = 250
+        TOLERANCE = 10
+
+        if distance > DESIRED_RADIUS + TOLERANCE:
+            direction.normalize_ip()
+            self.acc = direction * self.max_spd
+
+        elif distance < DESIRED_RADIUS - TOLERANCE:
+            direction.normalize_ip()
+            self.acc = -direction * self.max_spd
+
+        else:
+            # Shoot
+            attack_interval = 1 / self.attk_spd
+            if self.attack_timer >= attack_interval:
+                bullet = self.shoot(package.rect.center)
+                self.bullets.append(bullet)  # handled by Game
+                self.attack_timer = 0
+
+        self.enemy_mov(dt)
 
 
     def enemy_mov(self, dt):
@@ -417,17 +447,17 @@ class Enemy(Serializable):
         self.hp =  max(0, self.max_hp)
         self.dmg *= mult
         self.attk_spd *= mult
-        self.spd *= mult
-        self.max_spd = self.spd
+        self.mov_spd *= mult
+        self.max_spd = self.mov_spd
         self.crit_rate *= mult
         self.crit_dmg *= mult
 
 
 class EnemySpawner(Serializable):
-    def __init__(self, game_container_rect):
-        self.game_container_rect = game_container_rect
+    def __init__(self, rectmap):
+        self.rectmap = rectmap
         self.spawn_timer = 0.0
-        self.spawn_interval = 5.0
+        self.spawn_interval = 1.0
         self.max_enemies = 10
         self.spawned_enemies = []
 
@@ -450,17 +480,18 @@ class EnemySpawner(Serializable):
         self.max_enemies =  int(self.max_enemies*multi)
 
     def spawn_enemy(self, multiplier):
-        x, y = get_random_spawn_pos(self.game_container_rect)
+        x = random.randint(self.rectmap.left + 10, self.rectmap.right - 10)
+        y = random.randint(self.rectmap.top + 10, self.rectmap.bottom - 10)
         enemy_type = random.choice(["melee", "range"])
 
-        enemy = Enemy(x, y, enemy_type)
+        enemy = Enemy(x, y, 50, 50, enemy_type)
         enemy.apply_difficulty(multiplier)
 
         self.spawned_enemies.append(enemy)
 
     @classmethod
-    def from_dict(cls, data, game_container_rect):
-        spawner = cls(game_container_rect)
+    def from_dict(cls, data, rectmap):
+        spawner = cls(rectmap)
 
         spawner.spawned_enemies = [
             Enemy.from_dict(e) for e in data["spawned_enemies"]
@@ -478,8 +509,7 @@ class Item(Serializable):
     def draw(self):
         if self.destroyed:
             return
-        
-        pygame.draw.rect(screen, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
+        pygame.draw.rect(SCREEN, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
 
     def on_click(self, package):
         if self.destroyed:
@@ -493,8 +523,7 @@ class Item(Serializable):
 
 
 class ItemSpawner(Serializable):
-    def __init__(self, game_container_rect):
-        self.game_container_rect = game_container_rect
+    def __init__(self):
         self.spawn_timer = 0.0
         self.spawn_interval = 2.0
         self.max_item = 5
@@ -517,17 +546,14 @@ class ItemSpawner(Serializable):
 
 
     def spawn_item(self):
-        x = random.randint(self.game_container_rect.left + 10, self.game_container_rect.right - 50)
-        y = random.randint(self.game_container_rect.top + 10, self.game_container_rect.bottom -50)
-
+        x = random.randint(10, SC_W - 10)
+        y = random.randint(10, SC_H - 10)
         item = Item(x, y)
-
         self.spawned_items.append(item)
 
     @classmethod
-    def from_dict(cls, data, game_container_rect):
-        item_spawner = cls(game_container_rect)
-
+    def from_dict(cls, data):
+        item_spawner = cls()
         item_spawner.spawned_items = [
             Item.from_dict(i) for i in data["spawned_items"]
         ]
@@ -544,9 +570,9 @@ class Package():
         self.border_color = border_color
         self.border_size = border_size
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
-        pygame.draw.rect(screen, self.color, self.rect, border_radius=8)
+    def draw(self):
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+        pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
 
         if self.hp < self.max_hp:
 
@@ -557,8 +583,8 @@ class Package():
             bar_x = self.rect.x
             bar_y = self.rect.y + self.rect.height + 10
 
-            pygame.draw.rect(screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-            pygame.draw.rect(screen, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
+            pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
+            pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
 
 
 class Upgrade():
@@ -573,18 +599,23 @@ class Upgrade():
             "reload_spd":{"label": "Reload Speed",  "cost": 10, "mod": 0.5},
             "crit_rate": {"label": "Crit Rate",     "cost": 10, "mod": 0.01},
             "crit_dmg":  {"label": "Crit Damage",   "cost": 10, "mod": 0.1},
-            "mny_bnty":  {"label": "Money Gain",    "cost": 10, "mod": 10},
+            "mny_mod":  {"label": "Money Gain",    "cost": 10, "mod": 10},
         }
 
 
         self.buttons = []
         self.click_locked = True
+        self.show_menu = False
 
     # Create buttons once
-    def create_buttons(self, container):
+    def upgrade_menu(self):
+        if self.buttons:
+            return
+        
+        container = Container(x = SC_W-325, y=SC_H-(SC_H-130), width=300, height=SC_H-150, color=(255, 255, 255))
+        container.draw_rect()
         spacing = 60
         start_y = container.posy + 10
-
         for i, stat in enumerate(self.upgrade_items):
             btn_y = start_y + i * spacing
             bttn = Button(
@@ -599,6 +630,7 @@ class Upgrade():
                 action=stat           # ← stat name like "max_hp"
             )
             self.buttons.append(bttn)
+
 
     # Draw buttons and handle hover
     def draw(self, player, package):
@@ -618,7 +650,7 @@ class Upgrade():
             btn.text = f"{info['label']}: {current}  (+{info['mod']})  ${info['cost']}"
 
             hover = btn.rect.collidepoint(pygame.mouse.get_pos())
-            btn.draw(screen, hover=hover)
+            btn.draw(hover=hover)
 
     def click(self, player, package):
         m_pos = pygame.mouse.get_pos()

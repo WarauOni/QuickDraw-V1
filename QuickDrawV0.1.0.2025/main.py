@@ -1,7 +1,7 @@
 import pygame
 from config import *
 import json
-from object import *
+from entity import *
 
 # Initialize pygame
 pygame.init()
@@ -9,35 +9,117 @@ pygame.init()
 
 class Game():
     def __init__(self, load_data = None):
+        self.screen_center = [SC_W//2, SC_H//2]
+        self.rectmap = RectMap(x=self.screen_center[0]-WORLD_SIZE//2, y=self.screen_center[1]-WORLD_SIZE//2, width=WORLD_SIZE, height=WORLD_SIZE, color=WHITE)
 
-        self.game_container = Container(x = 25, y=20, width=SC_W-375, height=SC_H-40, color=(255, 255, 255))
-        self.gm_containerx, self.gm_containery = 25 + self.game_container.width, 20 + self.game_container.height
-        self.randx = random.randint(
-            25,
-            25 + self.game_container.width - 50
-        )
-
-        self.randy = random.randint(
-            20,
-            20 + self.game_container.height - 50
-        )
-        self.upgrade_container = Container(x = SC_W-325, y=SC_H-(SC_H-130), width=300, height=SC_H-150, color=(255, 255, 255))
-
+        self.game_over = False
 
         if load_data:
             self.player = Player.from_dict(load_data["player"])
-            self.spawner = EnemySpawner.from_dict(load_data["spawners"], self.game_container.rect)
-            self.items_spawn = ItemSpawner.from_dict(load_data["items"], self.game_container.rect)
+            self.spawner = EnemySpawner.from_dict(load_data["spawners"], self.rectmap.rect)
+            self.items_spawn = ItemSpawner.from_dict(load_data["items"])
             # assign enemies etc.
         else:
             self.player = Player()
-            self.spawner = EnemySpawner(self.game_container.rect)
-            self.items_spawn = ItemSpawner(self.game_container.rect)
+            self.spawner = EnemySpawner(self.rectmap.rect)
+            self.items_spawn = ItemSpawner()
             
-        self.pack = Package(x = (self.gm_containerx//2)-75, y = (self.gm_containery//2)-37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
+        self.pack = Package(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
         self.upgrade = Upgrade()
-        self.upgrade.create_buttons(self.upgrade_container)
         self.difficulty = DifficultyManager()
+
+    def game_over_screen(self, snapshot):
+        bttn_items = ['try again', 'main menu']
+        bttns = []
+        go_screen = Container(
+            x=(SC_W // 2)-300,
+            y=(SC_H // 2)-100,
+            width=600,
+            height=200,
+            color= WHITE
+        )
+        spacing = 250
+        button_width = 200
+        button_height = 50
+        gap = 40
+        total_width = 2 * button_width + gap
+        start_x = go_screen.posx + (go_screen.rect.width - total_width) // 2
+        button_y = go_screen.posy + 120
+
+        # Create buttons only once
+        for i, label in enumerate(bttn_items):
+            btn_x = start_x + i * spacing
+            bttn = Button(
+                x=btn_x,
+                y=button_y,
+                width=button_width,
+                height=button_height,
+                color=DESERT,
+                text=label.upper(),
+                text_color=BLACK,
+                font_size=28,
+                action=label  # Save action for identification
+            )
+            bttns.append(bttn)
+
+        while True:
+            SCREEN.blit(snapshot, (0, 0))
+            go_screen.draw_rect(SCREEN)
+
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    for bttn in bttns:
+                        if bttn.rect.collidepoint(event.pos):
+                            return bttn.action
+
+            # Draw buttons
+            for bttn in bttns:
+                hover = bttn.rect.collidepoint(pygame.mouse.get_pos())
+                bttn.draw(hover=hover)
+
+            # Draw title
+            font = pygame.font.Font(None, 74)
+            text = font.render("GAME OVER", True, (0, 0, 0))
+            text_rect = text.get_rect(center=(go_screen.posx + go_screen.rect.width // 2, go_screen.posy+ 50))
+            SCREEN.blit(text, text_rect)
+
+            pygame.display.update()
+
+
+    def draw_border_overlay(self, thickness=25, radius=25, color=DESERT):
+        width, height = SC_W, SC_H
+
+        # Create transparent surface
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Draw full rectangle (the border background)
+        pygame.draw.rect(overlay, color, (0, 0, width, height))
+
+        # Inner rect (the hole)
+        inner_rect = pygame.Rect(
+            thickness,
+            thickness,
+            width - thickness * 2,
+            height - thickness * 2
+        )
+
+        # Cut out rounded center (make transparent)
+        pygame.draw.rect(
+            overlay,
+            BLACK,   # fully transparent
+            inner_rect.inflate(6, 6),
+            border_radius=radius
+        )
+        pygame.draw.rect(
+            overlay,
+            (0, 0, 0, 0),   # fully transparent
+            inner_rect,
+            border_radius=radius
+        )
+
+        # Blit overlay on SCREEN
+        SCREEN.blit(overlay, (0, 0))
 
 
     def run(self):
@@ -45,29 +127,34 @@ class Game():
         running = True
 
         while running:
-            snapshot = screen.copy()
+            snapshot = SCREEN.copy()
+            SCREEN.fill(DESERT)
+            self.rectmap.draw()
+            self.draw_border_overlay()
             dt = clock.tick(60) / 1000  # ← THIS LINE
-            self.game_container.draw_rect(screen)
-            self.upgrade_container.draw_rect(screen)
-            self.upgrade.draw(self.player, self.pack)
             events = pygame.event.get()
             enemies = []
             self.difficulty.update(dt)
-            self.difficulty.draw(screen, self.game_container.rect)
+            self.difficulty.draw()
             
             # Handle input/events
             for event in events:
                 if event.type == pygame.QUIT:
                     save_game_data(self.player, self.spawner, self.items_spawn)
                     return "menu"
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    player_data, spawner_data, items_data = save_game_data(self.player, self.spawner, self.items_spawn)
-                    return {"state":"pause", "snapshot":snapshot, "saved_data": (player_data, spawner_data, items_data)}
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_b:
+                        self.upgrade.show_menu = not self.upgrade.show_menu
+                    elif event.key == pygame.K_ESCAPE:
+                        player_data, spawner_data, items_data = save_game_data(self.player, self.spawner, self.items_spawn)
+                        return {"state":"pause", "snapshot":snapshot, "saved_data": (player_data, spawner_data, items_data)}
+                
                 
 
-            self.pack.draw(screen)
-            self.player.draw(screen, self.game_container.rect)
+            self.pack.draw()
+            self.player.draw()
             hit_pos, dmg = self.player.update(events)  # or player.update()
+
 
             self.items_spawn.update(dt)
             for item in self.items_spawn.spawned_items:
@@ -84,11 +171,11 @@ class Game():
             enemies.extend(self.spawner.spawned_enemies)
             for enemy in enemies:
                 print("type",type(enemy), enemy)
-                enemy.draw(screen)
-                enemy.update(self.pack, dt, self.game_container.rect)
+                enemy.draw()
+                enemy.update(self.pack, dt)
 
                 for bullet in enemy.bullets[:]:
-                    bullet.draw(screen)
+                    bullet.draw()
                     bullet.update(dt)
                     if bullet.pos.distance_to(self.pack.rect.center) < bullet.radius + 20:
                         self.pack.hp -= bullet.dmg
@@ -99,33 +186,31 @@ class Game():
                         enemy.take_damage(dmg)
                     
                         
-
                 if enemy.destroyed:
                     self.spawner.spawned_enemies.remove(enemy)
-                    self.player.wallet += self.player.mny_bnty
+                    self.player.gain_reward(enemy.reward)
 
 
-            if self.pack.hp <= 0:
-                print("Package destroyed")
-                return "menu"
+            if self.pack.hp <= 0 and not self.game_over:
+                result = self.game_over_screen(snapshot)
+                if result == "try again":
+                    return "new_game"
+                elif result == "main menu":
+                    return "menu"
             
-            self.upgrade.click(self.player, self.pack)
+            if self.upgrade.show_menu:
+                self.upgrade.upgrade_menu()
+                self.upgrade.draw(self.player, self.pack)
+                self.upgrade.click(self.player, self.pack)
 
+            snapshot = SCREEN.copy()
             pygame.display.flip()
-
-# Load JSON Records
-def load_records():
-    try:
-        with open("records.json", "r") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []  # Return empty list if file not found
 
 
 def menu(events):
     menu_items = ["New Game","Load Game", "Settings", "Credits", "Quit"]
     container = Container(x=(SC_W//2) + 100, y=(SC_H//2)-300, width=500, height=600, color=(255, 255, 255))
-    container.draw_rect(screen)
+    container.draw_rect()
 
     buttons = []
     spacing = 110
@@ -144,7 +229,7 @@ def menu(events):
             action=label.lower().replace(" ", "_")
         )
         hover = bttn.rect.collidepoint(pygame.mouse.get_pos())
-        bttn.draw(screen, hover=hover)
+        bttn.draw(hover=hover)
         buttons.append(bttn)
 
     # Handle clicks
@@ -157,7 +242,6 @@ def menu(events):
                     return btn.action # e.g., "new_game"
 
     return "menu" # No change
-
 
 def new_game():
     game = Game()
@@ -179,7 +263,7 @@ def setting():
 def credit():
     pass
 
-def pause_game(screen, snapshot):
+def pause_game(snapshot):
     bttn_items = ['play', 'main menu']
     bttns = []
     pause = True
@@ -215,8 +299,8 @@ def pause_game(screen, snapshot):
         bttns.append(bttn)
 
     while pause:
-        screen.blit(snapshot, (0, 0))
-        pause_screen.draw_rect(screen)
+        SCREEN.blit(snapshot, (0, 0))
+        pause_screen.draw_rect()
 
         # Handle events
         for event in pygame.event.get():
@@ -233,13 +317,13 @@ def pause_game(screen, snapshot):
         # Draw buttons
         for bttn in bttns:
             hover = bttn.rect.collidepoint(pygame.mouse.get_pos())
-            bttn.draw(screen, hover=hover)
+            bttn.draw(hover=hover)
 
         # Draw title
         font = pygame.font.Font(None, 74)
         text = font.render("Pause", True, (0, 0, 0))
         text_rect = text.get_rect(center=(pause_screen.posx + pause_screen.rect.width // 2, pause_screen.posy+ 50))
-        screen.blit(text, text_rect)
+        SCREEN.blit(text, text_rect)
 
         pygame.display.update()
 
@@ -249,7 +333,7 @@ def game_loop():
     state = "menu"
     while running:
         clock.tick(60)  # Limit frame rate to 60 FPS
-        screen.fill(DESERT)
+        SCREEN.fill(DESERT)
         events = pygame.event.get()
             
         if state == 'menu':
@@ -282,9 +366,9 @@ def game_loop():
         elif state == 'quit':
             running = False
         elif state == "pause":
-            result = pause_game(screen, snapshot)
+            result = pause_game(snapshot)
             if result == "resume":
-                snapshot = screen.copy()
+                snapshot = SCREEN.copy()
                 state = "load_game"
             else:
                 state = result
