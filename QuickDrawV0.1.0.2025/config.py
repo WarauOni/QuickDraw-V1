@@ -70,6 +70,9 @@ def swap_color(surface, old_color, new_color):
 FONT = pygame.font.Font(None, 50)
 FONT_PATH = resource_path(ASSETS_DIR / "WEST____.TTF")
 
+MARGIN = 10
+PADDING = 10
+
 # Set Sfx
 # shoot = resource_path("assets/sound/gunshot.mp3")
 # buzzer = resource_path("assets/sound/buzzer.wav")

@@ -24,7 +24,7 @@ class Game():
             self.spawner = EnemySpawner(self.rectmap.rect)
             self.items_spawn = ItemSpawner()
             
-        self.pack = Package(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
+        self.carriage = Carriage(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
         self.upgrade = Upgrade()
         self.difficulty = DifficultyManager()
 
@@ -148,10 +148,11 @@ class Game():
                     elif event.key == pygame.K_ESCAPE:
                         player_data, spawner_data, items_data = save_game_data(self.player, self.spawner, self.items_spawn)
                         return {"state":"pause", "snapshot":snapshot, "saved_data": (player_data, spawner_data, items_data)}
-                
-                
+                if event.type == pygame.MOUSEWHEEL:
+                    self.upgrade.scroll_offset -= event.y * self.upgrade.scroll_speed
+            
 
-            self.pack.draw()
+            self.carriage.draw()
             self.player.draw()
             hit_pos, dmg = self.player.update(events)  # or player.update()
 
@@ -161,7 +162,7 @@ class Game():
                 item.draw()
                 if hit_pos:
                     if not item.destroyed and item.rect.collidepoint(hit_pos):
-                        item.on_click(self.pack)
+                        item.on_click(self.carriage)
 
                 if item.destroyed:
                     self.items_spawn.spawned_items.remove(item)
@@ -172,13 +173,23 @@ class Game():
             for enemy in enemies:
                 print("type",type(enemy), enemy)
                 enemy.draw()
-                enemy.update(self.pack, dt)
+                enemy.update(self.carriage, dt)
+
+
+                for other in self.spawner.spawned_enemies:
+                    if other is not enemy and not other.destroyed:
+                        enemy.resolve_collision(other.rect)
+
+                # Prevent overlap with items
+                for item in self.items_spawn.spawned_items:
+                    if not item.destroyed:
+                        enemy.resolve_collision(item.rect)
 
                 for bullet in enemy.bullets[:]:
                     bullet.draw()
                     bullet.update(dt)
-                    if bullet.pos.distance_to(self.pack.rect.center) < bullet.radius + 20:
-                        self.pack.hp -= bullet.dmg
+                    if self.carriage.rect.colliderect(bullet.rect):
+                        self.carriage.take_dmg(bullet.dmg)
                         enemy.bullets.remove(bullet)
 
                 if hit_pos:
@@ -191,7 +202,7 @@ class Game():
                     self.player.gain_reward(enemy.reward)
 
 
-            if self.pack.hp <= 0 and not self.game_over:
+            if self.carriage.hp <= 0 and not self.game_over:
                 result = self.game_over_screen(snapshot)
                 if result == "try again":
                     return "new_game"
@@ -199,9 +210,7 @@ class Game():
                     return "menu"
             
             if self.upgrade.show_menu:
-                self.upgrade.upgrade_menu()
-                self.upgrade.draw(self.player, self.pack)
-                self.upgrade.click(self.player, self.pack)
+                self.upgrade.upgrade_menu(self.player, self.carriage)
 
             snapshot = SCREEN.copy()
             pygame.display.flip()

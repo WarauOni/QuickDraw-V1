@@ -2,11 +2,14 @@ import pygame
 from config import *
 import random
 
+
+sprite = pygame.sprite.Sprite
+
 class DifficultyManager(Serializable):
     def __init__(self):
         self.elapsed_time = 0.0
-        self.level = 0
-        self.interval = 300.0  # 5 minutes
+        self.stage = 0
+        self.interval = 60.0  # 5 minutes
         self.scale = 1.1       # 10%
 
     def draw(self):
@@ -33,7 +36,7 @@ class DifficultyManager(Serializable):
         SCREEN.blit(text_surface, text_rect)
 
         # Optional: show difficulty level
-        level_surface = font.render(f"Level {self.level}", True, BLACK)
+        level_surface = font.render(f"Stage {self.stage}", True, BLACK)
         level_rect = level_surface.get_rect(midtop=(x + width // 2, y + height + 5))
         SCREEN.blit(level_surface, level_rect)
 
@@ -42,10 +45,10 @@ class DifficultyManager(Serializable):
         self.elapsed_time += dt
         if self.elapsed_time >= self.interval:
             self.elapsed_time -= self.interval
-            self.level += 1
+            self.stage += 1
 
     def multiplier(self):
-        return self.scale ** self.level
+        return self.scale ** self.stage
 
 class Button:
     def __init__(self, x, y, width, height, text, color, text_color, action=None, 
@@ -91,9 +94,9 @@ class Container:
         self.border_size = border_size
 
     def draw_rect(self, hover=False):
-        color = (255, 50, 50) if hover else self.color
+        # color = (255, 50, 50) if hover else self.color
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
-        pygame.draw.rect(SCREEN, color, self.rect, border_radius=8)
+        pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
 
     def draw_circle(self, camera_offset, center_x, center_y):
         pygame.draw.circle(SCREEN, (255, 255, 255), (int(center_x), int(center_y)), WORLD_RADIUS)
@@ -116,15 +119,20 @@ class Container:
 class Bullet(Serializable):
     def __init__(self, x, y, target, dmg):
         self.pos = pygame.Vector2(x, y)
-        self.dmg = dmg
         self.speed = 400
         self.radius = 4
+        self.dmg=dmg
 
         direction = pygame.Vector2(target) - self.pos
         self.vel = direction.normalize() * self.speed
 
+        self.rect = pygame.Rect(self.pos.x - self.radius, self.pos.y - self.radius, self.radius * 2, self.radius * 2)
+
+
     def update(self, dt):
         self.pos += self.vel * dt
+        self.rect.x = int(self.pos.x - self.radius)
+        self.rect.y = int(self.pos.y - self.radius)
 
     def draw(self):
         pygame.draw.circle(SCREEN, (255, 50, 50), self.pos, self.radius)
@@ -153,21 +161,26 @@ class Player(Serializable):
         self.mny_mod = 0
 
     def draw(self):
-        # Positioning and sizes
-        padding = 10
-        container_w, container_h = 200, 50
+        profile_rect = Container(x = SC_W//2 - 250, y= SC_H - (64+(PADDING*2)), width=500, height=250, color=WHITE)
+        profile_rect.draw_rect()
 
         # Wallet container (bottom-left)
-        wallet_x = padding
-        wallet_y = padding
-        wallet_container = Container(x=wallet_x, y=wallet_y, width=container_w, height=container_h, color=DESERT)
-        wallet_container.draw_rect(SCREEN)
+        wallet_x = profile_rect.rect.right - (64+PADDING)
+        wallet_y = profile_rect.rect.top + PADDING
+        wallet_container = Container(x=wallet_x, y=wallet_y, width=64, height=64, color=DESERT)
+        wallet_container.draw_rect()
+
+        # Gun chamber
+        chamber_x = profile_rect.rect.centerx - 150
+        chamber_y = SC_H - 150
+        chamber_container = Container(x=chamber_x, y=chamber_y, width=300, height=300, color=WHITE)
+        chamber_container.draw_rect()
 
         # Ammo container (top-left)
-        ammo_x = padding
-        ammo_y = SC_H - container_h - padding 
-        ammo_container = Container(x=ammo_x, y=ammo_y, width=container_w, height=container_h, color=DESERT)
-        ammo_container.draw_rect(SCREEN)
+        ammo_x = profile_rect.rect.left + PADDING
+        ammo_y = profile_rect.rect.top + PADDING
+        ammo_container = Container(x=ammo_x, y=ammo_y, width=64, height=64, color=DESERT)
+        ammo_container.draw_rect()
 
         # Fonts
         font = pygame.font.Font(FONT_PATH, 32)
@@ -175,14 +188,14 @@ class Player(Serializable):
         # --- Draw Wallet ---
         wallet = getattr(self, "wallet", 0)
         wallet_text = font.render(f"{wallet}$", True, BLACK)
-        wallet_rect = wallet_text.get_rect(center=(wallet_x + container_w // 2, wallet_y + container_h // 2))
+        wallet_rect = wallet_text.get_rect(center=(wallet_x + wallet_container.width // 2, wallet_y + wallet_container.height // 2))
         SCREEN.blit(wallet_text, wallet_rect)
 
         # --- Draw Ammo ---
         ammo = getattr(self, "max_ammo", 0)
         bullets = getattr(self, "num_of_bullets", 0)
         ammo_text = font.render(f"{bullets}/{ammo}", True, BLACK)
-        ammo_rect = ammo_text.get_rect(center=(ammo_x + container_w // 2, ammo_y + container_h // 2))
+        ammo_rect = ammo_text.get_rect(center=(ammo_x + ammo_container.width // 2, ammo_y + ammo_container.height // 2))
         SCREEN.blit(ammo_text, ammo_rect)
 
 
@@ -302,10 +315,10 @@ class Enemy(Serializable):
             pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
             pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
 
-    def update(self, package, dt):
+    def update(self, carriage, dt):
         self.attack_timer += dt
 
-        target_pos = pygame.Vector2(package.rect.center)
+        target_pos = pygame.Vector2(carriage.rect.center)
         pos = pygame.Vector2(self.rect.center)
         direction = target_pos - pos
         distance = direction.length()
@@ -318,19 +331,19 @@ class Enemy(Serializable):
 
         """Run AI depending on enemy type."""
         if self.behaviour_type == "melee":
-            self.behaviour_melee(package, dt)
+            self.behaviour_melee(carriage, dt)
         elif self.behaviour_type == "range":
-            self.behaviour_range(package, dt)
+            self.behaviour_range(carriage, dt)
         elif self.behaviour_type == "bomber":
-            self.behaviour_bomb(package, dt)
+            self.behaviour_bomb(carriage, dt)
         else:
             pass
 
         self.enemy_mov(dt)
 
     # --- Behaviour patterns ---
-    def behaviour_melee(self, package, dt):
-        target_rect = package.rect
+    def behaviour_melee(self, carriage, dt):
+        target_rect = carriage.rect
 
         # Move towards package
         target = pygame.Vector2(target_rect.center)
@@ -339,7 +352,7 @@ class Enemy(Serializable):
         distance = direction.length()
 
         # Check collision
-        if self.rect.colliderect(target_rect):
+        if self.resolve_collision(carriage.rect):
             # Stop moving
             self.vel *= 0
             self.acc *= 0
@@ -347,7 +360,7 @@ class Enemy(Serializable):
             # Attack
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
-                package.hp -= self.dmg
+                carriage.take_dmg(self.dmg)
                 self.attack_timer = 0
         else:
             # Move closer
@@ -357,9 +370,9 @@ class Enemy(Serializable):
 
         self.enemy_mov(dt)
 
-    def behaviour_range(self, package, dt):
+    def behaviour_range(self, carriage, dt):
 
-        target = pygame.Vector2(package.rect.center)
+        target = pygame.Vector2(carriage.rect.center)
         pos = pygame.Vector2(self.rect.center)
         direction = target - pos
         distance = direction.length()
@@ -379,7 +392,7 @@ class Enemy(Serializable):
             # Shoot
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
-                bullet = self.shoot(package.rect.center)
+                bullet = self.shoot(carriage.rect.center)
                 self.bullets.append(bullet)  # handled by Game
                 self.attack_timer = 0
 
@@ -427,6 +440,34 @@ class Enemy(Serializable):
 
         # Reset acceleration every frame
         self.acc.update(0, 0)
+
+    def resolve_collision(self, other_rect):
+        if not self.rect.colliderect(other_rect):
+            return False
+
+        # Calculate overlap
+        dx = self.rect.centerx - other_rect.centerx
+        dy = self.rect.centery - other_rect.centery
+
+        overlap_x = (self.rect.width / 2 + other_rect.width / 2) - abs(dx)
+        overlap_y = (self.rect.height / 2 + other_rect.height / 2) - abs(dy)
+
+        if overlap_x < overlap_y:
+            # Push horizontally
+            if dx > 0:
+                self.rect.x += overlap_x
+            else:
+                self.rect.x -= overlap_x
+            self.vel.x = 0
+        else:
+            # Push vertically
+            if dy > 0:
+                self.rect.y += overlap_y
+            else:
+                self.rect.y -= overlap_y
+            self.vel.y = 0
+
+        return True
 
     def shoot(self, target_pos):
         bullet = Bullet(
@@ -560,11 +601,14 @@ class ItemSpawner(Serializable):
         return item_spawner
         
         
-class Package():
+class Carriage():
     def __init__(self, x, y, width, height, color, border_color, border_size):
+        # === Stats ===
         self.max_hp = 100
         self.hp = max(0, self.max_hp)
         self.armor = 0
+
+        # === Object ===
         self.rect = pygame.Rect(x, y, width, height)
         self.color = color
         self.border_color = border_color
@@ -574,71 +618,112 @@ class Package():
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
         pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
 
-        if self.hp < self.max_hp:
+        font = pygame.font.Font(FONT_PATH, 20)
+        hp_txt = f"{self.hp}/{self.max_hp}"
+        text_surface = font.render(hp_txt, True, BLACK)
+        text_rect = text_surface.get_rect(
+        center=(self.rect.centerx, self.rect.bottom + 20)
+        )
+        SCREEN.blit(text_surface, text_rect)
 
-            # Health bar
-            hp_ratio = max(0, self.hp / self.max_hp)
-            bar_width = self.rect.width
-            bar_height = 6
-            bar_x = self.rect.x
-            bar_y = self.rect.y + self.rect.height + 10
-
-            pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-            pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
+    def take_dmg(self, dmg):
+        self.hp -= dmg
+        if self.hp <= 0:
+            self.destroyed = True
 
 
 class Upgrade():
     def __init__(self):
-        # Upgrade items
-        self.upgrade_items = {
-            "max_hp":    {"label": "Max HP",        "cost": 10, "mod": 10},
-            "armor":     {"label": "Armor",         "cost": 10, "mod": 1},
-            "dmg":       {"label": "Damage",        "cost": 10, "mod": 10},
-            "max_ammo":  {"label": "Max Ammo",      "cost": 10, "mod": 1},
-            "attk_spd":  {"label": "Attack Speed",  "cost": 10, "mod": 0.5},
-            "reload_spd":{"label": "Reload Speed",  "cost": 10, "mod": 0.5},
-            "crit_rate": {"label": "Crit Rate",     "cost": 10, "mod": 0.01},
-            "crit_dmg":  {"label": "Crit Damage",   "cost": 10, "mod": 0.1},
-            "mny_mod":  {"label": "Money Gain",    "cost": 10, "mod": 10},
-        }
+        # === Object ===
+        self.color = DESERT
+        # === Upgrade Items ===
+        self.upgrade_items = [
+            {"stat": "max_hp", "label": "Max HP", "cost": 10, "mod": 10},
+            {"stat": "armor", "label": "Armor", "cost": 10, "mod": 1},
+            {"stat": "dmg", "label": "Damage", "cost": 10, "mod": 10},
+            {"stat": "max_ammo", "label": "Max Ammo", "cost": 10, "mod": 1},
+            {"stat": "attk_spd", "label": "Attack Speed", "cost": 10, "mod": 0.5},
+            {"stat": "reload_spd", "label": "Reload Speed", "cost": 10, "mod": 0.5},
+            {"stat": "crit_rate", "label": "Crit Rate", "cost": 10, "mod": 0.01},
+            {"stat": "crit_dmg", "label": "Crit Damage", "cost": 10, "mod": 0.1},
+            {"stat": "mny_mod", "label": "Money Gain", "cost": 10, "mod": 10},
+        ]
 
-
-        self.buttons = []
+        self.cards = []
         self.click_locked = True
         self.show_menu = False
+        self.scroll_offset = 0
+        self.scroll_speed = 30
+
 
     # Create buttons once
-    def upgrade_menu(self):
-        if self.buttons:
-            return
-        
-        container = Container(x = SC_W-325, y=SC_H-(SC_H-130), width=300, height=SC_H-150, color=(255, 255, 255))
-        container.draw_rect()
-        spacing = 60
-        start_y = container.posy + 10
-        for i, stat in enumerate(self.upgrade_items):
-            btn_y = start_y + i * spacing
-            bttn = Button(
-                x=container.posx + 10,
-                y=btn_y,
-                width=280,
-                height=50,
-                color=DESERT,
-                text="",              # ← text set dynamically
-                text_color=BLACK,
-                font_size=25,
-                action=stat           # ← stat name like "max_hp"
+    def upgrade_menu(self, player, package):   
+        m_pos = pygame.mouse.get_pos()  
+        self.cards.clear()  # 🔥 CRITICAL    
+        up_container = Container(x = 200, y=200,  width=750, height=500, color= WHITE)
+        up_container.draw_rect()
+
+        cards_section_w = up_container.rect.width - (MARGIN * 2)
+        cards_section_h = up_container.rect.height - (MARGIN * 2)
+        card_sect_rect = pygame.Rect(
+            up_container.rect.x + MARGIN,
+            up_container.rect.y + MARGIN,
+            cards_section_w,
+            cards_section_h
+        )
+
+        card_w = 200
+        card_h = 200
+        gap = MARGIN
+
+        cols = max(1, cards_section_w // (card_w + gap))
+
+        total_grid_width = cols * card_w + (cols - 1) * gap
+        start_x = up_container.rect.centerx - total_grid_width // 2
+        start_y = up_container.rect.y + MARGIN - self.scroll_offset
+ 
+        total_rows = (len(self.upgrade_items) + cols - 1) // cols
+        total_content_height = total_rows * card_h + (total_rows - 1) * gap
+        max_scroll = max(0, total_content_height - cards_section_h)
+        self.scroll_offset = max(0, min(self.scroll_offset, max_scroll))
+
+        for i, upgrade in enumerate(self.upgrade_items):
+            row = i // cols
+            col = i % cols
+
+            x = start_x + col * (card_w + gap)
+            y = start_y + row * (card_h + gap)
+
+            rect = pygame.Rect(x, y, card_w, card_h)
+
+            self.cards.append({
+                "rect": rect,
+                "data": upgrade
+            })
+
+        SCREEN.set_clip(card_sect_rect)
+        # --- draw cards + data ---
+        for i, card in enumerate(self.cards):
+            upgrade = card["data"]
+
+            hover = card["rect"].collidepoint(m_pos)
+            color = LIGHT_GRAY if hover else self.color
+            pygame.draw.rect(SCREEN, color, card["rect"], border_radius=12)
+
+            # image placeholder
+            image_rect = pygame.Rect(
+                card['rect'].centerx - 35,
+                card['rect'].y + PADDING * 2,
+                64,
+                64
             )
-            self.buttons.append(bttn)
+            pygame.draw.rect(SCREEN, WHITE, image_rect, border_radius=8)
+            pygame.draw.rect(SCREEN, WHITE, image_rect, 2, border_radius=8)
 
-
-    # Draw buttons and handle hover
-    def draw(self, player, package):
-        for btn in self.buttons:
-            stat = btn.action
-            info = self.upgrade_items[stat]
+            font = pygame.font.Font(FONT_PATH, 20)
 
             # Get current value from package first, then player
+            stat = upgrade['stat']
             if hasattr(package, stat):
                 current = getattr(package, stat)
             elif hasattr(player, stat):
@@ -646,36 +731,41 @@ class Upgrade():
             else:
                 current = 0
 
-            # Update button text
-            btn.text = f"{info['label']}: {current}  (+{info['mod']})  ${info['cost']}"
+            # --- TEXT ---
+            label_surf = font.render(f"{upgrade['label']}: {current} (+{upgrade['mod']})", True, BLACK)
+            cost_surf = font.render(f"Cost: ${upgrade['cost']}", True, BLACK)
 
-            hover = btn.rect.collidepoint(pygame.mouse.get_pos())
-            btn.draw(hover=hover)
+            SCREEN.blit(label_surf, (card['rect'].x + PADDING, image_rect.bottom + PADDING))
+            SCREEN.blit(cost_surf, (card['rect'].x + PADDING, image_rect.bottom + PADDING + 25))
 
-    def click(self, player, package):
-        m_pos = pygame.mouse.get_pos()
+
+        SCREEN.set_clip(None)
+
+
+        return self.click(m_pos, player, package)
+
+
+    def click(self, m_pos, player, package):
         mouse_buttons = pygame.mouse.get_pressed()
 
         if mouse_buttons[0] and not self.click_locked:
-            for btn in self.buttons:
-                if btn.rect.collidepoint(m_pos):
-                    self.add_upgrade(player, package, btn.action)
+            for card in self.cards:
+                if card["rect"].collidepoint(m_pos):
+                    self.add_upgrade(player, package, card['data'])
                     self.click_locked = True  # lock until release
 
         elif not mouse_buttons[0]:
             self.click_locked = False  # unlock when button released
 
+    def add_upgrade(self, player, package, upgrade_data):
+        stat = upgrade_data["stat"]
+        effect_value = upgrade_data["mod"]
+        cost_value = upgrade_data["cost"]
 
-    def add_upgrade(self, player, package, stat):
-        info = self.upgrade_items[stat]
-        cost = info["cost"]
-
-        # Check money
-        if player.wallet < cost:
+        if player.wallet < cost_value:
             print("Not enough money")
             return
 
-        # Determine target (package or player)
         if hasattr(package, stat):
             target = package
         elif hasattr(player, stat):
@@ -684,19 +774,86 @@ class Upgrade():
             print(f"Stat '{stat}' not found")
             return
 
-        # Apply upgrade
         current = getattr(target, stat)
-        new_value = round(current + info["mod"], 2)
+        new_value = round(current + effect_value, 2)
         setattr(target, stat, new_value)
 
+        print(f"{stat} upgraded to {new_value}")
+
         # Deduct money
-        player.wallet -= cost
+        player.wallet -= cost_value
 
         # Increase cost for next upgrade (scaling)
-        info["cost"] += 10
+        upgrade_data["cost"] += 10
 
-        print(f"{stat} upgraded to {new_value}, next cost: {info['cost']}")
+    # def add_upgrade(self, player, package, stat):
+    #     info = self.upgrade_items[stat]
+    #     cost = info["cost"]
+
+    #     # Check money
+    #     if player.wallet < cost:
+    #         print("Not enough money")
+    #         return
+
+    #     # Determine target (package or player)
+    #     if hasattr(package, stat):
+    #         target = package
+    #     elif hasattr(player, stat):
+    #         target = player
+    #     else:
+    #         print(f"Stat '{stat}' not found")
+    #         return
+
+    #     # Apply upgrade
+    #     current = getattr(target, stat)
+    #     new_value = round(current + info["mod"], 2)
+    #     setattr(target, stat, new_value)
+
+    #     # Deduct money
+    #     player.wallet -= cost
+
+    #     # Increase cost for next upgrade (scaling)
+    #     info["cost"] += 10
+
+    #     print(f"{stat} upgraded to {new_value}, next cost: {info['cost']}")
 
             
 
 
+        # spacing = 60
+        # start_y = container.posy + 10
+        # for i, stat in enumerate(self.upgrade_items):
+        #     btn_y = start_y + i * spacing
+        #     bttn = Button(
+        #         x=container.posx + 10,
+        #         y=btn_y,
+        #         width=280,
+        #         height=50,
+        #         color=DESERT,
+        #         text="",              # ← text set dynamically
+        #         text_color=BLACK,
+        #         font_size=25,
+        #         action=stat           # ← stat name like "max_hp"
+        #     )
+        #     self.buttons.append(bttn)
+
+
+    # # Draw buttons and handle hover
+    # def draw(self, player, package):
+    #     for btn in self.buttons:
+    #         stat = btn.action
+    #         info = self.upgrade_items[stat]
+
+    #         # Get current value from package first, then player
+    #         if hasattr(package, stat):
+    #             current = getattr(package, stat)
+    #         elif hasattr(player, stat):
+    #             current = getattr(player, stat)
+    #         else:
+    #             current = 0
+
+    #         # Update button text
+    #         btn.text = f"{info['label']}: {current}  (+{info['mod']})  ${info['cost']}"
+
+    #         hover = btn.rect.collidepoint(pygame.mouse.get_pos())
+    #         btn.draw(hover=hover)
