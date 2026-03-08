@@ -134,14 +134,62 @@ class Bullet(Serializable):
         self.rect.x = int(self.pos.x - self.radius)
         self.rect.y = int(self.pos.y - self.radius)
 
-    def draw(self):
-        pygame.draw.circle(SCREEN, (255, 50, 50), self.pos, self.radius)
+    def draw(self, camera):
+        posx = int(self.pos.x - camera.offset_x)
+        posy = int(self.pos.y - camera.offset_y)
+        pygame.draw.circle(SCREEN, (255, 50, 50), (posx, posy), self.radius)
+
+
+        
+# class Carriage():
+#     def __init__(self, x, y, width, height, color, border_color, border_size):
+#         # === Stats ===
+#         self.pos = pygame.Vector2(x, y)
+#         self.max_hp = 100
+#         self.hp = max(0, self.max_hp)
+#         self.armor = 0
+
+#         # === Object ===
+#         self.rect = pygame.Rect(self.pos.x, self.pos.y, width, height)
+#         self.color = color
+#         self.border_color = border_color
+#         self.border_size = border_size
+
+#     def draw(self, camera):
+#         posx = int(self.pos.x - camera.offset_x)
+#         posy = int(self.pos.y - camera.offset_y)
+#         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+#         pygame.draw.rect(SCREEN, self.color, (posx, posy), border_radius=8)
+
+#         font = pygame.font.Font(FONT_PATH, 20)
+#         hp_txt = f"{self.hp}/{self.max_hp}"
+#         text_surface = font.render(hp_txt, True, BLACK)
+#         text_rect = text_surface.get_rect(
+#         center=(self.rect.centerx, self.rect.bottom + 20)
+#         )
+#         SCREEN.blit(text_surface, text_rect)
+
+#     def take_dmg(self, dmg):
+#         self.hp -= dmg
+#         if self.hp <= 0:
+#             self.destroyed = True
 
 
 
 class Player(Serializable):
-    def __init__(self):
+    def __init__(self, x, y, width, height, color, border_color, border_size):
+        # === Objects ===
+        self.pos = pygame.Vector2(x, y)
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, width, height)
+   
+        self.color = color
+        self.border_color = border_color
+        self.border_size = border_size
+
         # === Stats ===
+        self.max_hp = 100
+        self.hp = max(0, self.max_hp)
+        self.armor = 0
         self.max_ammo = 6
         self.num_of_bullets = self.max_ammo
         self.dmg = 100
@@ -159,8 +207,10 @@ class Player(Serializable):
         self.reload_finish_time = 0
 
         self.mny_mod = 0
+        self.cam_spd = 10
 
-    def draw(self):
+
+    def draw_UI(self):
         profile_rect = Container(x = SC_W//2 - 250, y= SC_H - (64+(PADDING*2)), width=500, height=250, color=WHITE)
         profile_rect.draw_rect()
 
@@ -198,10 +248,26 @@ class Player(Serializable):
         ammo_rect = ammo_text.get_rect(center=(ammo_x + ammo_container.width // 2, ammo_y + ammo_container.height // 2))
         SCREEN.blit(ammo_text, ammo_rect)
 
+    def draw_Object(self, camera):
+        self.pos = self.rect.move(camera.offset_x, camera.offset_y)
+        self.rect.x, self.rect.y = self.pos.x, self.pos.y
 
-    def update(self, events):
+        print(self.pos.x, self.rect.x, "pos")
+
+        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
+        pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
+
+
+        font = pygame.font.Font(FONT_PATH, 20)
+        hp_txt = f"{self.hp}/{self.max_hp}"
+        text_surface = font.render(hp_txt, True, BLACK)
+        text_rect = text_surface.get_rect(
+        center=(self.rect.centerx, self.rect.bottom + 20)
+        )
+        SCREEN.blit(text_surface, text_rect)
+
+    def update(self, events, camera):
         now = pygame.time.get_ticks()
-
         # Finish reload
         if self.reloading and now >= self.reload_finish_time:
             self.num_of_bullets = self.max_ammo
@@ -210,16 +276,17 @@ class Player(Serializable):
 
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                return self.shoot()
+                return self.shoot(camera)
             
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 self.start_reload()
 
-
         return None, 0
         
-    def shoot(self):
+    def shoot(self, camera):
         now = pygame.time.get_ticks()
+        mx, my = pygame.mouse.get_pos()
+        hit_pos = pygame.Vector2(mx + camera.offset_x, my + camera.offset_y)
 
         if self.reloading:
             return None, 0
@@ -238,7 +305,7 @@ class Player(Serializable):
         is_crit = random.random() < self.crit_rate  # crit_rate = 0.0 to 1.0
         damage = self.dmg + (self.dmg * (self.crit_dmg if is_crit else 0))
 
-        return pygame.mouse.get_pos(), damage
+        return hit_pos, damage
 
     def start_reload(self):
         if self.reloading:
@@ -251,11 +318,17 @@ class Player(Serializable):
     def gain_reward(self, reward):
         self.wallet += (reward + self.mny_mod)
 
+    def take_dmg(self, dmg):
+        self.hp -= dmg
+        if self.hp <= 0:
+            self.destroyed = True
+
 
 class Enemy(Serializable):
     def __init__(self, x, y, w, h, e_type):
         # === Object ===
-        self.rect = pygame.Rect(x, y, w, h)
+        self.pos = pygame.Vector2(x, y)
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, w, h)
         self.color = RED
         self.destroyed = False
         self.behaviour_type = e_type
@@ -297,28 +370,30 @@ class Enemy(Serializable):
         ]
         return enemies
 
-    def draw(self):
+    def draw(self, camera):
         if self.destroyed:
             return
+        
+        offset_rect = self.rect.move(camera.offset_x, camera.offset_y)
 
-
-        pygame.draw.rect(SCREEN, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
+        print(self.pos.x, self.rect.x, "enemypos")
+        pygame.draw.rect(SCREEN, self.color, offset_rect)
 
         if self.hp < self.max_hp:
             # Health bar
             hp_ratio = max(0, self.hp / self.max_hp)
             bar_width = self.rect.width
             bar_height = 6
-            bar_x = self.rect.x
-            bar_y = self.rect.y + self.rect.height + 10
+            bar_x = self.pos.x
+            bar_y = self.pos.y + self.rect.height + 10
 
             pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
             pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
 
-    def update(self, carriage, dt):
-        self.attack_timer += dt
+    def update(self, player, dt, camera):
 
-        target_pos = pygame.Vector2(carriage.rect.center)
+        self.attack_timer += dt
+        target_pos = pygame.Vector2(player.rect.center)
         pos = pygame.Vector2(self.rect.center)
         direction = target_pos - pos
         distance = direction.length()
@@ -327,32 +402,29 @@ class Enemy(Serializable):
         if distance > 1:
             direction.normalize_ip()
             self.acc = direction * self.max_spd
-    
+            self.enemy_mov(dt)
 
-        """Run AI depending on enemy type."""
+        # Attack pattern
         if self.behaviour_type == "melee":
-            self.behaviour_melee(carriage, dt)
+            self.behaviour_melee(player, dt, direction, camera)
         elif self.behaviour_type == "range":
-            self.behaviour_range(carriage, dt)
+            self.behaviour_range(target_pos, distance, direction, dt, camera)
         elif self.behaviour_type == "bomber":
-            self.behaviour_bomb(carriage, dt)
-        else:
-            pass
+            self.behaviour_bomb(target_pos, distance, direction)
+        # else:
+        #     # Move in the direction of the package
+        #     if distance > 1:
+        #         direction.normalize_ip()
+        #         self.acc = direction * self.max_spd
 
-        self.enemy_mov(dt)
+        # self.rect.x, self.rect.y = self.pos.x, self.pos.y
+
 
     # --- Behaviour patterns ---
-    def behaviour_melee(self, carriage, dt):
-        target_rect = carriage.rect
-
-        # Move towards package
-        target = pygame.Vector2(target_rect.center)
-        pos = pygame.Vector2(self.rect.center)
-        direction = target - pos
-        distance = direction.length()
-
+    def behaviour_melee(self, target, dt, direction, camera):
+        target_rect = target.rect
         # Check collision
-        if self.resolve_collision(carriage.rect):
+        if self.resolve_collision(target_rect):
             # Stop moving
             self.vel *= 0
             self.acc *= 0
@@ -360,23 +432,13 @@ class Enemy(Serializable):
             # Attack
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
-                carriage.take_dmg(self.dmg)
+                target.take_dmg(self.dmg)
                 self.attack_timer = 0
-        else:
-            # Move closer
-            if distance > 1:
-                direction.normalize_ip()
-                self.acc = direction * self.max_spd
+            else:
+                self.enemy_mov(dt, direction, camera)
 
-        self.enemy_mov(dt)
 
-    def behaviour_range(self, carriage, dt):
-
-        target = pygame.Vector2(carriage.rect.center)
-        pos = pygame.Vector2(self.rect.center)
-        direction = target - pos
-        distance = direction.length()
-
+    def behaviour_range(self, target, distance, direction, dt, camera):
         DESIRED_RADIUS = 250
         TOLERANCE = 10
 
@@ -392,18 +454,11 @@ class Enemy(Serializable):
             # Shoot
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
-                bullet = self.shoot(carriage.rect.center)
+                bullet = self.shoot(target)
                 self.bullets.append(bullet)  # handled by Game
                 self.attack_timer = 0
 
-        self.enemy_mov(dt)
-
-    def behaviour_bomb(self, package, dt):
-        target = pygame.Vector2(package.rect.center)
-        pos = pygame.Vector2(self.rect.center)
-        direction = target - pos
-        distance = direction.length()
-
+    def behaviour_bomb(self, target, distance, direction):
         DESIRED_RADIUS = 250
         TOLERANCE = 10
 
@@ -419,15 +474,11 @@ class Enemy(Serializable):
             # Shoot
             attack_interval = 1 / self.attk_spd
             if self.attack_timer >= attack_interval:
-                bullet = self.shoot(package.rect.center)
+                bullet = self.shoot(target)
                 self.bullets.append(bullet)  # handled by Game
                 self.attack_timer = 0
-
-        self.enemy_mov(dt)
-
 
     def enemy_mov(self, dt):
-        # Apply acceleration to velocity
         self.vel += self.acc * dt
 
         # Clamp speed
@@ -435,8 +486,9 @@ class Enemy(Serializable):
             self.vel.scale_to_length(self.max_spd)
 
         # Move enemy
-        self.rect.x += self.vel.x * dt
-        self.rect.y += self.vel.y * dt
+        self.pos.x += self.vel.x * dt 
+        self.pos.y += self.vel.y * dt 
+
 
         # Reset acceleration every frame
         self.acc.update(0, 0)
@@ -542,15 +594,20 @@ class EnemySpawner(Serializable):
 
 class Item(Serializable):
     def __init__(self, x, y):
-        self.destroyed = False
-        self.rect = pygame.Rect(x, y, 50, 50)
+        self.pos = pygame.Vector2(x, y)
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, 50, 50)
         self.color = GREEN
         self.heal_percent = 0.05  # 5%
 
-    def draw(self):
+        self.destroyed = False
+
+    def draw(self, camera):
         if self.destroyed:
             return
-        pygame.draw.rect(SCREEN, self.color, (self.rect.x, self.rect.y, self.rect.width, self.rect.height))
+        
+        posx, posy = self.pos.x + camera.offset_x, self.pos.y + camera.offset_y
+        self.rect.center = (posx, posy)
+        pygame.draw.rect(SCREEN, self.color, self.rect)
 
     def on_click(self, package):
         if self.destroyed:
@@ -600,38 +657,6 @@ class ItemSpawner(Serializable):
         ]
         return item_spawner
         
-        
-class Carriage():
-    def __init__(self, x, y, width, height, color, border_color, border_size):
-        # === Stats ===
-        self.max_hp = 100
-        self.hp = max(0, self.max_hp)
-        self.armor = 0
-
-        # === Object ===
-        self.rect = pygame.Rect(x, y, width, height)
-        self.color = color
-        self.border_color = border_color
-        self.border_size = border_size
-
-    def draw(self):
-        pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
-        pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
-
-        font = pygame.font.Font(FONT_PATH, 20)
-        hp_txt = f"{self.hp}/{self.max_hp}"
-        text_surface = font.render(hp_txt, True, BLACK)
-        text_rect = text_surface.get_rect(
-        center=(self.rect.centerx, self.rect.bottom + 20)
-        )
-        SCREEN.blit(text_surface, text_rect)
-
-    def take_dmg(self, dmg):
-        self.hp -= dmg
-        if self.hp <= 0:
-            self.destroyed = True
-
-
 class Upgrade():
     def __init__(self):
         # === Object ===
@@ -657,7 +682,7 @@ class Upgrade():
 
 
     # Create buttons once
-    def upgrade_menu(self, player, package):   
+    def upgrade_menu(self, player):   
         m_pos = pygame.mouse.get_pos()  
         self.cards.clear()  # 🔥 CRITICAL    
         up_container = Container(x = 200, y=200,  width=750, height=500, color= WHITE)
@@ -724,9 +749,7 @@ class Upgrade():
 
             # Get current value from package first, then player
             stat = upgrade['stat']
-            if hasattr(package, stat):
-                current = getattr(package, stat)
-            elif hasattr(player, stat):
+            if hasattr(player, stat):
                 current = getattr(player, stat)
             else:
                 current = 0
@@ -742,22 +765,22 @@ class Upgrade():
         SCREEN.set_clip(None)
 
 
-        return self.click(m_pos, player, package)
+        return self.click(m_pos, player)
 
 
-    def click(self, m_pos, player, package):
+    def click(self, m_pos, player):
         mouse_buttons = pygame.mouse.get_pressed()
 
         if mouse_buttons[0] and not self.click_locked:
             for card in self.cards:
                 if card["rect"].collidepoint(m_pos):
-                    self.add_upgrade(player, package, card['data'])
+                    self.add_upgrade(player, card['data'])
                     self.click_locked = True  # lock until release
 
         elif not mouse_buttons[0]:
             self.click_locked = False  # unlock when button released
 
-    def add_upgrade(self, player, package, upgrade_data):
+    def add_upgrade(self, player, upgrade_data):
         stat = upgrade_data["stat"]
         effect_value = upgrade_data["mod"]
         cost_value = upgrade_data["cost"]
@@ -766,9 +789,7 @@ class Upgrade():
             print("Not enough money")
             return
 
-        if hasattr(package, stat):
-            target = package
-        elif hasattr(player, stat):
+        if hasattr(player, stat):
             target = player
         else:
             print(f"Stat '{stat}' not found")

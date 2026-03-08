@@ -274,3 +274,102 @@ class RectMap(BaseMap):
     def draw(self):
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size*2, self.border_size*2))
         pygame.draw.rect(SCREEN, self.color, self.rect)
+
+    def draw_border_overlay(self, thickness=25, radius=25, color=DESERT):
+        width, height = SC_W, SC_H
+        # Create transparent surface
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        # Draw full rectangle (the border background)
+        pygame.draw.rect(overlay, color, (0, 0, width, height))
+        # Inner rect (the hole)
+        inner_rect = pygame.Rect(
+            thickness,
+            thickness,
+            width - thickness * 2,
+            height - thickness * 2
+        )
+
+        # Cut out rounded center (make transparent)
+        pygame.draw.rect(
+            overlay,
+            BLACK,   # fully transparent
+            inner_rect.inflate(6, 6),
+            border_radius=radius
+        )
+        pygame.draw.rect(
+            overlay,
+            (0, 0, 0, 0),   # fully transparent
+            inner_rect,
+            border_radius=radius
+        )
+
+        # Blit overlay on SCREEN
+        SCREEN.blit(overlay, (0, 0))
+
+    
+    def resolve_world_bounds(self, entity, camera):
+        pass
+
+
+# === CAMERA ===
+class Camera():
+    def __init__(self, width, height):
+        self.offset_x = 0
+        self.offset_y = 0
+        self.width = width
+        self.height = height
+        self.rect = pygame.Rect(0, 0, self.width, self.height)
+
+
+        self.cam_spd_x = 0
+        self.cam_spd_y = 0
+        self.cam_x = 0
+        self.cam_y = 0
+
+    def follow(self, target):
+        # Center camera on target
+        self.offset_x = target.pos.x - SC_W // 2
+        self.offset_y = target.pos.y - SC_H // 2
+
+    def apply(self, obj_rect):
+        # Convert world coordinates -> screen coordinates
+        return obj_rect.move(-self.offset_x, -self.offset_y)
+
+    def camera_control(self, entity):
+        keys = pygame.key.get_pressed()
+
+        # thrust force
+        if keys[pygame.K_w]: self.cam_spd_y -= 10
+        if keys[pygame.K_s]: self.cam_spd_y += 10
+        if keys[pygame.K_a]: self.cam_spd_x -= 10
+        if keys[pygame.K_d]: self.cam_spd_x += 10
+
+        
+        self.offset_x = self.cam_spd_x 
+        self.offset_y = self.cam_spd_y
+
+        self.cam_spd_x = 0
+        self.cam_spd_y = 0
+
+        # Left
+        if entity.rect.left < self.rect.left:
+            entity.rect.left = self.rect.left
+            entity.posx = entity.rect.x
+            print(entity.posx, entity.rect.x,"triggred")
+
+        # Right
+        if entity.rect.right > self.rect.right:
+            entity.rect.right = self.rect.right
+            entity.pos.x = entity.rect.centerx
+
+        # Top
+        if entity.rect.top < self.rect.top:
+            entity.rect.top = self.rect.top
+            entity.pos.y = entity.rect.centery
+
+        # Bottom
+        if entity.rect.bottom > self.rect.bottom:
+            entity.rect.bottom = self.rect.bottom
+            entity.pos.y = entity.rect.centery
+
+

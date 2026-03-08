@@ -11,7 +11,6 @@ class Game():
     def __init__(self, load_data = None):
         self.screen_center = [SC_W//2, SC_H//2]
         self.rectmap = RectMap(x=self.screen_center[0]-WORLD_SIZE//2, y=self.screen_center[1]-WORLD_SIZE//2, width=WORLD_SIZE, height=WORLD_SIZE, color=WHITE)
-
         self.game_over = False
 
         if load_data:
@@ -20,13 +19,14 @@ class Game():
             self.items_spawn = ItemSpawner.from_dict(load_data["items"])
             # assign enemies etc.
         else:
-            self.player = Player()
+            self.player = Player(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
             self.spawner = EnemySpawner(self.rectmap.rect)
             self.items_spawn = ItemSpawner()
             
-        self.carriage = Carriage(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
+        # self.carriage = Carriage(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
         self.upgrade = Upgrade()
         self.difficulty = DifficultyManager()
+        self.camera = Camera(SC_W, SC_H)
 
     def game_over_screen(self, snapshot):
         bttn_items = ['try again', 'main menu']
@@ -87,41 +87,6 @@ class Game():
             pygame.display.update()
 
 
-    def draw_border_overlay(self, thickness=25, radius=25, color=DESERT):
-        width, height = SC_W, SC_H
-
-        # Create transparent surface
-        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-
-        # Draw full rectangle (the border background)
-        pygame.draw.rect(overlay, color, (0, 0, width, height))
-
-        # Inner rect (the hole)
-        inner_rect = pygame.Rect(
-            thickness,
-            thickness,
-            width - thickness * 2,
-            height - thickness * 2
-        )
-
-        # Cut out rounded center (make transparent)
-        pygame.draw.rect(
-            overlay,
-            BLACK,   # fully transparent
-            inner_rect.inflate(6, 6),
-            border_radius=radius
-        )
-        pygame.draw.rect(
-            overlay,
-            (0, 0, 0, 0),   # fully transparent
-            inner_rect,
-            border_radius=radius
-        )
-
-        # Blit overlay on SCREEN
-        SCREEN.blit(overlay, (0, 0))
-
-
     def run(self):
         clock = pygame.time.Clock()
         running = True
@@ -130,12 +95,14 @@ class Game():
             snapshot = SCREEN.copy()
             SCREEN.fill(DESERT)
             self.rectmap.draw()
-            self.draw_border_overlay()
+            self.rectmap.draw_border_overlay()
+            self.rectmap.resolve_world_bounds(self.player, self.camera)
             dt = clock.tick(60) / 1000  # ← THIS LINE
             events = pygame.event.get()
             enemies = []
             self.difficulty.update(dt)
             self.difficulty.draw()
+            self.camera.camera_control(self.player)
             
             # Handle input/events
             for event in events:
@@ -152,17 +119,18 @@ class Game():
                     self.upgrade.scroll_offset -= event.y * self.upgrade.scroll_speed
             
 
-            self.carriage.draw()
-            self.player.draw()
-            hit_pos, dmg = self.player.update(events)  # or player.update()
+            # self.carriage.draw(self.camera)
+            self.player.draw_UI()
+            self.player.draw_Object(self.camera)
+            hit_pos, dmg = self.player.update(events, self.camera)  # or player.update()
 
 
             self.items_spawn.update(dt)
             for item in self.items_spawn.spawned_items:
-                item.draw()
+                item.draw(self.camera)
                 if hit_pos:
                     if not item.destroyed and item.rect.collidepoint(hit_pos):
-                        item.on_click(self.carriage)
+                        item.on_click(self.player)
 
                 if item.destroyed:
                     self.items_spawn.spawned_items.remove(item)
@@ -172,8 +140,8 @@ class Game():
             enemies.extend(self.spawner.spawned_enemies)
             for enemy in enemies:
                 print("type",type(enemy), enemy)
-                enemy.draw()
-                enemy.update(self.carriage, dt)
+                enemy.draw(self.camera)
+                enemy.update(self.player, dt, self.camera)
 
 
                 for other in self.spawner.spawned_enemies:
@@ -186,10 +154,10 @@ class Game():
                         enemy.resolve_collision(item.rect)
 
                 for bullet in enemy.bullets[:]:
-                    bullet.draw()
+                    bullet.draw(self.camera)
                     bullet.update(dt)
-                    if self.carriage.rect.colliderect(bullet.rect):
-                        self.carriage.take_dmg(bullet.dmg)
+                    if self.player.rect.colliderect(bullet.rect):
+                        self.player.take_dmg(bullet.dmg)
                         enemy.bullets.remove(bullet)
 
                 if hit_pos:
@@ -202,7 +170,7 @@ class Game():
                     self.player.gain_reward(enemy.reward)
 
 
-            if self.carriage.hp <= 0 and not self.game_over:
+            if self.player.hp <= 0 and not self.game_over:
                 result = self.game_over_screen(snapshot)
                 if result == "try again":
                     return "new_game"
@@ -210,7 +178,7 @@ class Game():
                     return "menu"
             
             if self.upgrade.show_menu:
-                self.upgrade.upgrade_menu(self.player, self.carriage)
+                self.upgrade.upgrade_menu(self.player)
 
             snapshot = SCREEN.copy()
             pygame.display.flip()
