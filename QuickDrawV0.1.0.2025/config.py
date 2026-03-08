@@ -269,9 +269,13 @@ class BaseMap:
 class RectMap(BaseMap):
     def __init__(self, x, y, width, height, color, border_color=BLACK, border_size=3):
         super().__init__(x, y, width, height, color, border_color, border_size)
-        self.rect = pygame.Rect(x, y, width, height)
+        self.pos = pygame.Vector2(x, y)
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, width, height)
 
-    def draw(self):
+    def draw(self, camera):
+        self.pos = self.rect.move(camera.offset_x, camera.offset_y)
+        self.rect.x, self.rect.y = self.pos.x, self.pos.y
+
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size*2, self.border_size*2))
         pygame.draw.rect(SCREEN, self.color, self.rect)
 
@@ -310,7 +314,6 @@ class RectMap(BaseMap):
     def resolve_world_bounds(self, entity, camera):
         pass
 
-
 # === CAMERA ===
 class Camera():
     def __init__(self, width, height):
@@ -320,7 +323,7 @@ class Camera():
         self.height = height
         self.rect = pygame.Rect(0, 0, self.width, self.height)
 
-
+        self.cam_spd = 10
         self.cam_spd_x = 0
         self.cam_spd_y = 0
         self.cam_x = 0
@@ -335,14 +338,22 @@ class Camera():
         # Convert world coordinates -> screen coordinates
         return obj_rect.move(-self.offset_x, -self.offset_y)
 
-    def camera_control(self, entity):
+    def camera_control(self, entity, rectmap):
         keys = pygame.key.get_pressed()
 
         # thrust force
-        if keys[pygame.K_w]: self.cam_spd_y -= 10
-        if keys[pygame.K_s]: self.cam_spd_y += 10
-        if keys[pygame.K_a]: self.cam_spd_x -= 10
-        if keys[pygame.K_d]: self.cam_spd_x += 10
+        if keys[pygame.K_w]: 
+            if not entity.rect.top < self.rect.top:
+                self.cam_spd_y -= self.cam_spd
+        if keys[pygame.K_s]: 
+            if not entity.rect.bottom > self.rect.bottom: 
+                self.cam_spd_y += self.cam_spd
+        if keys[pygame.K_a]: 
+            if not entity.rect.left < self.rect.left: 
+                self.cam_spd_x -= self.cam_spd
+        if keys[pygame.K_d]: 
+            if not entity.rect.right > self.rect.right:
+                self.cam_spd_x += self.cam_spd
 
         
         self.offset_x = self.cam_spd_x 
@@ -350,26 +361,4 @@ class Camera():
 
         self.cam_spd_x = 0
         self.cam_spd_y = 0
-
-        # Left
-        if entity.rect.left < self.rect.left:
-            entity.rect.left = self.rect.left
-            entity.posx = entity.rect.x
-            print(entity.posx, entity.rect.x,"triggred")
-
-        # Right
-        if entity.rect.right > self.rect.right:
-            entity.rect.right = self.rect.right
-            entity.pos.x = entity.rect.centerx
-
-        # Top
-        if entity.rect.top < self.rect.top:
-            entity.rect.top = self.rect.top
-            entity.pos.y = entity.rect.centery
-
-        # Bottom
-        if entity.rect.bottom > self.rect.bottom:
-            entity.rect.bottom = self.rect.bottom
-            entity.pos.y = entity.rect.centery
-
 

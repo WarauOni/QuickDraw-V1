@@ -248,11 +248,9 @@ class Player(Serializable):
         ammo_rect = ammo_text.get_rect(center=(ammo_x + ammo_container.width // 2, ammo_y + ammo_container.height // 2))
         SCREEN.blit(ammo_text, ammo_rect)
 
-    def draw_Object(self, camera):
-        self.pos = self.rect.move(camera.offset_x, camera.offset_y)
-        self.rect.x, self.rect.y = self.pos.x, self.pos.y
-
-        print(self.pos.x, self.rect.x, "pos")
+    def draw_Object(self, rectmap):
+        self.pos = pygame.Vector2(rectmap.rect.centerx, rectmap.rect.centery)
+        self.rect.x, self.rect.y = self.pos
 
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size * 2, self.border_size * 2), border_radius=8)
         pygame.draw.rect(SCREEN, self.color, self.rect, border_radius=8)
@@ -266,7 +264,7 @@ class Player(Serializable):
         )
         SCREEN.blit(text_surface, text_rect)
 
-    def update(self, events, camera):
+    def update(self, events):
         now = pygame.time.get_ticks()
         # Finish reload
         if self.reloading and now >= self.reload_finish_time:
@@ -276,17 +274,17 @@ class Player(Serializable):
 
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                return self.shoot(camera)
+                return self.shoot()
             
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 self.start_reload()
 
         return None, 0
         
-    def shoot(self, camera):
+    def shoot(self):
         now = pygame.time.get_ticks()
         mx, my = pygame.mouse.get_pos()
-        hit_pos = pygame.Vector2(mx + camera.offset_x, my + camera.offset_y)
+        hit_pos = pygame.Vector2(mx , my)
 
         if self.reloading:
             return None, 0
@@ -374,10 +372,11 @@ class Enemy(Serializable):
         if self.destroyed:
             return
         
-        offset_rect = self.rect.move(camera.offset_x, camera.offset_y)
+        self.pos = pygame.Vector2(self.rect.x + camera.offset_x, self.rect.y + camera.offset_y)
+        self.rect.x, self.rect.y = self.pos
 
-        print(self.pos.x, self.rect.x, "enemypos")
-        pygame.draw.rect(SCREEN, self.color, offset_rect)
+        print(self.pos, self.rect, "enemypos")
+        pygame.draw.rect(SCREEN, self.color, self.rect)
 
         if self.hp < self.max_hp:
             # Health bar
@@ -390,8 +389,7 @@ class Enemy(Serializable):
             pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
             pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
 
-    def update(self, player, dt, camera):
-
+    def update(self, player, dt):
         self.attack_timer += dt
         target_pos = pygame.Vector2(player.rect.center)
         pos = pygame.Vector2(self.rect.center)
@@ -399,30 +397,27 @@ class Enemy(Serializable):
         distance = direction.length()
 
         # Move in the direction of the package
-        if distance > 1:
-            direction.normalize_ip()
-            self.acc = direction * self.max_spd
-            self.enemy_mov(dt)
+        if distance == 0: return
 
         # Attack pattern
         if self.behaviour_type == "melee":
-            self.behaviour_melee(player, dt, direction, camera)
+            self.behaviour_melee(player, dt, direction)
         elif self.behaviour_type == "range":
-            self.behaviour_range(target_pos, distance, direction, dt, camera)
+            self.behaviour_range(target_pos, distance, direction, dt)
         elif self.behaviour_type == "bomber":
             self.behaviour_bomb(target_pos, distance, direction)
-        # else:
-        #     # Move in the direction of the package
-        #     if distance > 1:
-        #         direction.normalize_ip()
-        #         self.acc = direction * self.max_spd
 
-        # self.rect.x, self.rect.y = self.pos.x, self.pos.y
+        self.enemy_mov(dt)
+
+        self.rect.x, self.rect.y = self.pos.x, self.pos.y
 
 
     # --- Behaviour patterns ---
-    def behaviour_melee(self, target, dt, direction, camera):
+    def behaviour_melee(self, target, dt, direction):
         target_rect = target.rect
+        direction.normalize_ip()
+        self.acc = direction * self.max_spd
+
         # Check collision
         if self.resolve_collision(target_rect):
             # Stop moving
@@ -435,10 +430,10 @@ class Enemy(Serializable):
                 target.take_dmg(self.dmg)
                 self.attack_timer = 0
             else:
-                self.enemy_mov(dt, direction, camera)
+                self.enemy_mov(dt)
 
 
-    def behaviour_range(self, target, distance, direction, dt, camera):
+    def behaviour_range(self, target, distance, direction, dt):
         DESIRED_RADIUS = 250
         TOLERANCE = 10
 
@@ -575,7 +570,7 @@ class EnemySpawner(Serializable):
     def spawn_enemy(self, multiplier):
         x = random.randint(self.rectmap.left + 10, self.rectmap.right - 10)
         y = random.randint(self.rectmap.top + 10, self.rectmap.bottom - 10)
-        enemy_type = random.choice(["melee", "range"])
+        enemy_type = random.choice(["melee"])
 
         enemy = Enemy(x, y, 50, 50, enemy_type)
         enemy.apply_difficulty(multiplier)
@@ -605,8 +600,8 @@ class Item(Serializable):
         if self.destroyed:
             return
         
-        posx, posy = self.pos.x + camera.offset_x, self.pos.y + camera.offset_y
-        self.rect.center = (posx, posy)
+        self.pos = pygame.Vector2(self.rect.x + camera.offset_x, self.rect.y + camera.offset_y)
+        self.rect.x, self.rect.y = self.pos
         pygame.draw.rect(SCREEN, self.color, self.rect)
 
     def on_click(self, package):

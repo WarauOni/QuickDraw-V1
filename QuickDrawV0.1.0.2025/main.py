@@ -19,7 +19,7 @@ class Game():
             self.items_spawn = ItemSpawner.from_dict(load_data["items"])
             # assign enemies etc.
         else:
-            self.player = Player(x = self.screen_center[0] - 75, y = self.screen_center[1] - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
+            self.player = Player(x = self.rectmap.rect.centerx - 75, y = self.rectmap.rect.centery - 37.5, width=125, height=75, color=RED, border_color=BLACK, border_size=2)
             self.spawner = EnemySpawner(self.rectmap.rect)
             self.items_spawn = ItemSpawner()
             
@@ -86,7 +86,6 @@ class Game():
 
             pygame.display.update()
 
-
     def run(self):
         clock = pygame.time.Clock()
         running = True
@@ -94,15 +93,14 @@ class Game():
         while running:
             snapshot = SCREEN.copy()
             SCREEN.fill(DESERT)
-            self.rectmap.draw()
+            self.rectmap.draw(self.camera)
             self.rectmap.draw_border_overlay()
-            self.rectmap.resolve_world_bounds(self.player, self.camera)
             dt = clock.tick(60) / 1000  # ← THIS LINE
             events = pygame.event.get()
             enemies = []
             self.difficulty.update(dt)
             self.difficulty.draw()
-            self.camera.camera_control(self.player)
+            self.camera.camera_control(self.player, self.rectmap)
             
             # Handle input/events
             for event in events:
@@ -121,8 +119,8 @@ class Game():
 
             # self.carriage.draw(self.camera)
             self.player.draw_UI()
-            self.player.draw_Object(self.camera)
-            hit_pos, dmg = self.player.update(events, self.camera)  # or player.update()
+            self.player.draw_Object(self.rectmap)
+            hit_pos, dmg = self.player.update(events)  # or player.update()
 
 
             self.items_spawn.update(dt)
@@ -141,7 +139,7 @@ class Game():
             for enemy in enemies:
                 print("type",type(enemy), enemy)
                 enemy.draw(self.camera)
-                enemy.update(self.player, dt, self.camera)
+                enemy.update(self.player, dt)
 
 
                 for other in self.spawner.spawned_enemies:
