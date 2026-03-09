@@ -1,54 +1,136 @@
 import pygame
 from config import *
 import random
+import math
 
 
 sprite = pygame.sprite.Sprite
+
+# class DifficultyManager(Serializable):
+#     def __init__(self):
+#         self.elapsed_time = 0.0
+#         self.stage = 0
+#         self.interval = 60.0  # 5 minutes
+#         self.scale = 1.1       # 10%
+
+#     def draw(self):
+#         # Positioning
+#         x, y = SC_W//2 - 100, 10
+#         width, height = 200, 50
+
+#         # Draw background container
+#         time_container = Container(x=x, y=y, width=width, height=height, color=DESERT)
+#         time_container.draw_rect(SCREEN)
+
+#         # Fonts
+#         font = pygame.font.Font(FONT_PATH, 36)
+
+#         # Convert elapsed time to MM:SS
+#         total_seconds = int(self.elapsed_time)
+#         minutes = total_seconds // 60
+#         seconds = total_seconds % 60
+#         time_text = f"{minutes:02d}:{seconds:02d}"
+
+#         # Render text
+#         text_surface = font.render(time_text, True, BLACK)
+#         text_rect = text_surface.get_rect(center=(x + width // 2, y + height // 2))
+#         SCREEN.blit(text_surface, text_rect)
+
+#         # Optional: show difficulty level
+#         level_surface = font.render(f"Stage {self.stage}", True, BLACK)
+#         level_rect = level_surface.get_rect(midtop=(x + width // 2, y + height + 5))
+#         SCREEN.blit(level_surface, level_rect)
+
+
+#     def update(self, dt):
+#         self.elapsed_time += dt
+#         if self.elapsed_time >= self.interval:
+#             self.elapsed_time -= self.interval
+#             self.stage += 1
+
+#     def multiplier(self):
+#         return self.scale ** self.stage
 
 class DifficultyManager(Serializable):
     def __init__(self):
         self.elapsed_time = 0.0
         self.stage = 0
-        self.interval = 60.0  # 5 minutes
-        self.scale = 1.1       # 10%
+        
+        # Timing constants
+        self.stage_duration = 60.0    # 1 minute per stage
+        self.delay_duration = 3.0     # 3 second delay
+        self.boss_interval = 5        # Every 5 stages
+        
+        # State: "ACTIVE" or "DELAY"
+        self.state = "ACTIVE"
+        self.state_timer = 0.0
+        
+        self.scale = 1.1 
+        self.boss_ready = False # Flag to tell the spawner to spawn a boss
+
+    def update(self, dt, current_enemies):
+        self.elapsed_time += dt # Total game time
+        self.state_timer += dt  # Time within current state
+        
+        if self.state == "ACTIVE":
+            # Condition 1: 1 Minute passed OR Condition 2: All enemies dead
+            if self.state_timer >= self.stage_duration or (len(current_enemies) == 0 and self.stage >= 0):
+                self.start_delay()
+
+        elif self.state == "DELAY":
+            if self.state_timer >= self.delay_duration:
+                self.start_next_stage()
+
+    def start_delay(self):
+        self.state = "DELAY"
+        self.state_timer = 0.0
+        print("Stage Clear! 3-second delay started...")
+
+    def start_next_stage(self):
+        self.stage += 1
+        self.state = "ACTIVE"
+        self.state_timer = 0.0
+        
+        # Check for Boss Spawn (Every 5 stages)
+        if self.stage % self.boss_interval == 0:
+            self.boss_ready = True
+            
+        print(f"Starting Stage {self.stage}")
+
+    def multiplier(self):
+        # Calculation: scale ^ stage
+        return self.scale ** self.stage
 
     def draw(self):
-        # Positioning
+        # Position and Container (Keep your existing code)
         x, y = SC_W//2 - 100, 10
         width, height = 200, 50
-
-        # Draw background container
-        time_container = Container(x=x, y=y, width=width, height=height, color=DESERT)
+        
+        # Change color based on state (Visual feedback)
+        bg_color = DESERT if self.state == "ACTIVE" else (200, 200, 200)
+        time_container = Container(x=x, y=y, width=width, height=height, color=bg_color)
         time_container.draw_rect(SCREEN)
 
-        # Fonts
         font = pygame.font.Font(FONT_PATH, 36)
+        
+        # Show time REMAINING in the stage if Active, otherwise show Delay timer
+        if self.state == "ACTIVE":
+            display_time = max(0, self.stage_duration - self.state_timer)
+        else:
+            display_time = max(0, self.delay_duration - self.state_timer)
+            
+        total_seconds = int(display_time)
+        time_text = f"{total_seconds // 60:02d}:{total_seconds % 60:02d}"
 
-        # Convert elapsed time to MM:SS
-        total_seconds = int(self.elapsed_time)
-        minutes = total_seconds // 60
-        seconds = total_seconds % 60
-        time_text = f"{minutes:02d}:{seconds:02d}"
-
-        # Render text
         text_surface = font.render(time_text, True, BLACK)
         text_rect = text_surface.get_rect(center=(x + width // 2, y + height // 2))
         SCREEN.blit(text_surface, text_rect)
 
-        # Optional: show difficulty level
-        level_surface = font.render(f"Stage {self.stage}", True, BLACK)
+        # Show current stage
+        level_text = f"Stage {self.stage}" if self.state == "ACTIVE" else "GET READY!"
+        level_surface = font.render(level_text, True, BLACK)
         level_rect = level_surface.get_rect(midtop=(x + width // 2, y + height + 5))
         SCREEN.blit(level_surface, level_rect)
-
-
-    def update(self, dt):
-        self.elapsed_time += dt
-        if self.elapsed_time >= self.interval:
-            self.elapsed_time -= self.interval
-            self.stage += 1
-
-    def multiplier(self):
-        return self.scale ** self.stage
 
 class Button:
     def __init__(self, x, y, width, height, text, color, text_color, action=None, 
@@ -139,6 +221,67 @@ class Bullet(Serializable):
         posy = int(self.pos.y - camera.offset_y)
         pygame.draw.circle(SCREEN, (255, 50, 50), (posx, posy), self.radius)
 
+class Bomb(Serializable):
+    def __init__(self, x, y, dmg):
+        # The bomb starts at a World Position
+        self.pos = pygame.Vector2(x, y)
+        self.width, self.height = 20, 60
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, self.width, self.height)
+
+        # === Stats ===
+        self.dmg = dmg
+        self.blast_radius = 100
+        self.timer = 3.0  # Seconds until explosion
+        self.color = (50, 50, 50) # Dark gray
+        self.exploded = False
+        self.destroyed = False # To tell the Game class to delete it
+
+    def update(self, dt, player):
+        if self.exploded:
+            return
+
+        self.timer -= dt
+
+        if self.timer <= 0:
+            self.explode_action(player)
+
+    def explode_action(self, player):
+        self.exploded = True
+        player_center = pygame.Vector2(player.rect.center)
+        distance = self.pos.distance_to(player_center)
+        
+        print(f"Bomb World Pos: {self.pos}")
+        print(f"Player World Pos: {player_center}")
+        print(f"Distance: {distance} | Radius: {self.blast_radius}")
+        
+        # Check distance to player for damage
+        distance = self.pos.distance_to(pygame.Vector2(player.rect.center))
+        if distance <= self.blast_radius:
+            player.take_dmg(self.dmg)
+        
+        # Mark for removal after explosion logic finishes
+        self.destroyed = True
+
+    def draw(self, camera):
+        # Calculate Screen Space
+        self.pos = pygame.Vector2(self.rect.x - camera.offset_x, self.rect.y - camera.offset_y)
+        self.rect.x, self.rect.y = self.pos
+        
+        # Pulse effect: gets redder as timer runs out
+        pulse_color = (255, 0, 0, 100) # Red with alpha
+        pygame.draw.circle(SCREEN, (200, 0, 0), self.rect.center, self.blast_radius, 2) # Outline
+
+        # 2. Draw the Bomb itself
+        pygame.draw.rect(SCREEN, self.color, self.rect)
+        
+        # Optional: Draw timer text or a small red 'fuse' light
+        if int(self.timer * 5) % 2 == 0: # Blinking light
+            pygame.draw.circle(SCREEN, (255, 0, 0), self.rect.center, 5)
+
+    def on_click(self):
+        if self.destroyed:
+            return
+        self.destroyed = True
 
         
 # class Carriage():
@@ -181,7 +324,6 @@ class Player(Serializable):
         # === Objects ===
         self.pos = pygame.Vector2(x, y)
         self.rect = pygame.Rect(self.pos.x, self.pos.y, width, height)
-   
         self.color = color
         self.border_color = border_color
         self.border_size = border_size
@@ -190,11 +332,11 @@ class Player(Serializable):
         self.max_hp = 100
         self.hp = max(0, self.max_hp)
         self.armor = 0
-        self.max_ammo = 6
+        self.max_ammo = 60
         self.num_of_bullets = self.max_ammo
         self.dmg = 100
-        self.attk_spd = 2
-        self.reload_spd = 1
+        self.attk_spd = 10
+        self.reload_spd = 10
         self.crit_rate = 0.1
         self.crit_dmg = 0.5
         self.wallet = 0
@@ -346,7 +488,14 @@ class Enemy(Serializable):
         self.acc = pygame.Vector2(0, 0)
         self.max_spd = self.mov_spd
 
+        # === Bomb Behaviour ===
+        self.state = "teleport" # teleport, waiting, shooting
+        self.state_timer = 0.0
+        self.teleport_cooldown = 2.0 # Seconds between teleports
+        self.wait_duration = 1.0     # Time spent standing still before shooting
+        self.bombs = []
 
+        # === Range/Melee Behaviour ===
         self.attack_timer = 0.0
         self.bullets = []
         self.visible = False  # enemy starts hidden
@@ -372,10 +521,9 @@ class Enemy(Serializable):
         if self.destroyed:
             return
         
-        self.pos = pygame.Vector2(self.rect.x + camera.offset_x, self.rect.y + camera.offset_y)
+        self.pos = pygame.Vector2(self.rect.x - camera.offset_x, self.rect.y - camera.offset_y)
         self.rect.x, self.rect.y = self.pos
 
-        print(self.pos, self.rect, "enemypos")
         pygame.draw.rect(SCREEN, self.color, self.rect)
 
         if self.hp < self.max_hp:
@@ -389,7 +537,7 @@ class Enemy(Serializable):
             pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
             pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
 
-    def update(self, player, dt):
+    def update(self, player, dt, camera):
         self.attack_timer += dt
         target_pos = pygame.Vector2(player.rect.center)
         pos = pygame.Vector2(self.rect.center)
@@ -403,9 +551,9 @@ class Enemy(Serializable):
         if self.behaviour_type == "melee":
             self.behaviour_melee(player, dt, direction)
         elif self.behaviour_type == "range":
-            self.behaviour_range(target_pos, distance, direction, dt)
+            self.behaviour_range(target_pos, distance, direction)
         elif self.behaviour_type == "bomber":
-            self.behaviour_bomb(target_pos, distance, direction)
+            self.behaviour_bomb(target_pos, dt, camera)
 
         self.enemy_mov(dt)
 
@@ -433,7 +581,7 @@ class Enemy(Serializable):
                 self.enemy_mov(dt)
 
 
-    def behaviour_range(self, target, distance, direction, dt):
+    def behaviour_range(self, target, distance, direction):
         DESIRED_RADIUS = 250
         TOLERANCE = 10
 
@@ -453,7 +601,259 @@ class Enemy(Serializable):
                 self.bullets.append(bullet)  # handled by Game
                 self.attack_timer = 0
 
-    def behaviour_bomb(self, target, distance, direction):
+    def behaviour_bomb(self, target_pos, dt, camera):
+        self.state_timer += dt
+        
+        # Define screen bounds in WORLD coordinates based on camera offset
+        screen_left = camera.offset_x
+        screen_right = camera.offset_x + 800 # Replace with your screen width
+        screen_top = camera.offset_y
+        screen_bottom = camera.offset_y + 600 # Replace with your screen height
+
+        if self.state == "teleport":
+            # 1. Pick a random spot inside the screen
+            # 2. Ensure it's within a certain radius of the player
+            radius = 300
+            angle = random.uniform(0, 2 * math.pi)
+            
+            # Calculate a spot near the player
+            target_x = target_pos.x + math.cos(angle) * radius
+            target_y = target_pos.y + math.sin(angle) * radius
+            
+            # Clamp that spot so it's definitely on the screen
+            final_x = max(screen_left, min(target_x, screen_right - self.rect.width))
+            final_y = max(screen_top, min(target_y, screen_bottom - self.rect.height))
+            
+            self.pos.update(final_x, final_y)
+            self.rect.topleft = (self.pos.x, self.pos.y)
+            self.vel.update(0, 0) # Stop all momentum
+            
+            self.state = "waiting"
+            self.state_timer = 0
+
+        elif self.state == "waiting":
+            # Just stand there for a second
+            if self.state_timer >= self.wait_duration:
+                self.state = "shooting"
+                self.state_timer = 0
+
+        elif self.state == "shooting":
+            # --- THE LIMIT CHECK ---
+            if len(self.bombs) < 1: 
+                # Only spawn if no bombs exist for THIS enemy
+                distance = 200
+                random_direction = pygame.Vector2(1, 0).rotate(random.randint(0, 360))
+                spawn_pos = self.rect.center + (random_direction * distance)
+
+                new_bomb = Bomb(spawn_pos.x, spawn_pos.y, self.dmg)
+                self.bombs.append(new_bomb)
+                
+                # Move to cooldown after successful spawn
+                self.state = "cooldown"
+                self.state_timer = 0
+            else:
+                # Optional: If you want the enemy to wait until the bomb explodes 
+                # before even starting the cooldown, do nothing here.
+                # Or, if you want them to teleport anyway:
+                self.state = "cooldown"
+                self.state_timer = 0
+            
+            self.state = "cooldown"
+            self.state_timer = 0
+
+        elif self.state == "cooldown":
+            # Wait before teleporting again
+            if self.state_timer >= self.teleport_cooldown:
+                self.state = "teleport"
+                self.state_timer = 0
+
+
+    def enemy_mov(self, dt):
+        self.vel += self.acc * dt
+
+        # Clamp speed
+        if self.vel.length() > self.max_spd:
+            self.vel.scale_to_length(self.max_spd)
+
+        # Move enemy
+        self.pos.x += self.vel.x * dt 
+        self.pos.y += self.vel.y * dt 
+
+
+        # Reset acceleration every frame
+        self.acc.update(0, 0)
+
+    def resolve_collision(self, other_rect):
+        if not self.rect.colliderect(other_rect):
+            return False
+
+        # Calculate overlap
+        dx = self.rect.centerx - other_rect.centerx
+        dy = self.rect.centery - other_rect.centery
+
+        overlap_x = (self.rect.width / 2 + other_rect.width / 2) - abs(dx)
+        overlap_y = (self.rect.height / 2 + other_rect.height / 2) - abs(dy)
+
+        if overlap_x < overlap_y:
+            # Push horizontally
+            if dx > 0:
+                self.rect.x += overlap_x
+            else:
+                self.rect.x -= overlap_x
+            self.vel.x = 0
+        else:
+            # Push vertically
+            if dy > 0:
+                self.rect.y += overlap_y
+            else:
+                self.rect.y -= overlap_y
+            self.vel.y = 0
+
+        return True
+
+    def shoot(self, target_pos):
+        bullet = Bullet(
+            x=self.rect.centerx,
+            y=self.rect.centery,
+            target=target_pos,
+            dmg=self.dmg
+        )
+        return bullet
+
+    def take_damage(self, dmg):
+        self.hp -= dmg
+        if self.hp <= 0:
+            self.destroyed = True
+
+    def apply_difficulty(self, mult):
+        self.max_hp = int(self.max_hp * mult)
+        self.hp =  max(0, self.max_hp)
+        self.dmg *= mult
+        self.attk_spd *= mult
+        self.mov_spd *= mult
+        self.max_spd = self.mov_spd
+        self.crit_rate *= mult
+        self.crit_dmg *= mult
+
+
+class Boss(Serializable):
+    def __init__(self, x, y, w, h, b_type):
+        # === Object ===
+        self.pos = pygame.Vector2(x, y)
+        self.rect = pygame.Rect(self.pos.x, self.pos.y, w, h)
+        self.color = PURPLE
+        self.destroyed = False
+        self.behaviour_type = b_type
+
+        # === Stats ===
+        self.max_hp = 500
+        self.hp = self.max_hp
+        self.dmg = 5
+        self.attk_spd = 1
+        self.crit_rate = 0.1
+        self.crit_dmg = 0.1
+        self.reward = 10
+
+        # === Mov Stats ===
+        self.mov_spd = 100
+        self.vel = pygame.Vector2(0, 0)
+        self.acc = pygame.Vector2(0, 0)
+        self.max_spd = self.mov_spd
+
+        # === Bomb Behaviour ===
+        self.state = "teleport" # teleport, waiting, shooting
+        self.state_timer = 0.0
+        self.teleport_cooldown = 2.0 # Seconds between teleports
+        self.wait_duration = 1.0     # Time spent standing still before shooting
+        self.bombs = []
+
+        # === Range/Melee Behaviour ===
+        self.attack_timer = 0.0
+        self.bullets = []
+        self.visible = False  # enemy starts hidden
+
+
+    def to_dict(self):
+        data = super().to_dict()
+        data["bullets"] = [b.to_dict() for b in self.bullets]
+        data["boss_type"] = self.behaviour_type
+        return data
+    
+    @classmethod
+    def from_dict(cls, data):
+        rect_data = data["rect"]  # [x, y, w, h]
+        e_type = data["boss_type"]
+        enemies = cls(*rect_data["value"], e_type)
+        enemies.bullets = [
+            Bullet.from_dict(b) for b in data["bullets"]
+        ]
+        return enemies
+
+    def draw(self, camera):
+        if self.destroyed:
+            return
+        
+        self.pos = pygame.Vector2(self.rect.x - camera.offset_x, self.rect.y - camera.offset_y)
+        self.rect.x, self.rect.y = self.pos
+
+        pygame.draw.rect(SCREEN, self.color, self.rect)
+
+        if self.hp < self.max_hp:
+            # Health bar
+            hp_ratio = max(0, self.hp / self.max_hp)
+            bar_width = self.rect.width
+            bar_height = 6
+            bar_x = self.pos.x
+            bar_y = self.pos.y + self.rect.height + 10
+
+            pygame.draw.rect(SCREEN, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
+            pygame.draw.rect(SCREEN, (0, 255, 0), (bar_x, bar_y, bar_width * hp_ratio, bar_height))
+
+    def update(self, player, dt, camera):
+        self.attack_timer += dt
+        target_pos = pygame.Vector2(player.rect.center)
+        pos = pygame.Vector2(self.rect.center)
+        direction = target_pos - pos
+        distance = direction.length()
+
+        # Move in the direction of the package
+        if distance == 0: return
+
+        # Attack pattern
+        if self.behaviour_type == "melee":
+            self.behaviour_melee(player, dt, direction)
+        elif self.behaviour_type == "range":
+            self.behaviour_range(target_pos, distance, direction)
+        elif self.behaviour_type == "bomber":
+            self.behaviour_bomb(target_pos, dt, camera)
+
+        self.enemy_mov(dt)
+
+        self.rect.x, self.rect.y = self.pos.x, self.pos.y
+
+
+    # --- Behaviour patterns ---
+    def behaviour_melee(self, target, dt, direction):
+        target_rect = target.rect
+        direction.normalize_ip()
+        self.acc = direction * self.max_spd
+
+        # Check collision
+        if self.resolve_collision(target_rect):
+            # Stop moving
+            self.vel *= 0
+            self.acc *= 0
+
+            # Attack
+            attack_interval = 1 / self.attk_spd
+            if self.attack_timer >= attack_interval:
+                target.take_dmg(self.dmg)
+                self.attack_timer = 0
+            else:
+                self.enemy_mov(dt)
+
+
+    def behaviour_range(self, target, distance, direction):
         DESIRED_RADIUS = 250
         TOLERANCE = 10
 
@@ -472,6 +872,73 @@ class Enemy(Serializable):
                 bullet = self.shoot(target)
                 self.bullets.append(bullet)  # handled by Game
                 self.attack_timer = 0
+
+    def behaviour_bomb(self, target_pos, dt, camera):
+        self.state_timer += dt
+        
+        # Define screen bounds in WORLD coordinates based on camera offset
+        screen_left = camera.offset_x
+        screen_right = camera.offset_x + 800 # Replace with your screen width
+        screen_top = camera.offset_y
+        screen_bottom = camera.offset_y + 600 # Replace with your screen height
+
+        if self.state == "teleport":
+            # 1. Pick a random spot inside the screen
+            # 2. Ensure it's within a certain radius of the player
+            radius = 300
+            angle = random.uniform(0, 2 * math.pi)
+            
+            # Calculate a spot near the player
+            target_x = target_pos.x + math.cos(angle) * radius
+            target_y = target_pos.y + math.sin(angle) * radius
+            
+            # Clamp that spot so it's definitely on the screen
+            final_x = max(screen_left, min(target_x, screen_right - self.rect.width))
+            final_y = max(screen_top, min(target_y, screen_bottom - self.rect.height))
+            
+            self.pos.update(final_x, final_y)
+            self.rect.topleft = (self.pos.x, self.pos.y)
+            self.vel.update(0, 0) # Stop all momentum
+            
+            self.state = "waiting"
+            self.state_timer = 0
+
+        elif self.state == "waiting":
+            # Just stand there for a second
+            if self.state_timer >= self.wait_duration:
+                self.state = "shooting"
+                self.state_timer = 0
+
+        elif self.state == "shooting":
+            # --- THE LIMIT CHECK ---
+            if len(self.bombs) < 1: 
+                # Only spawn if no bombs exist for THIS enemy
+                distance = 200
+                random_direction = pygame.Vector2(1, 0).rotate(random.randint(0, 360))
+                spawn_pos = self.rect.center + (random_direction * distance)
+
+                new_bomb = Bomb(spawn_pos.x, spawn_pos.y, self.dmg)
+                self.bombs.append(new_bomb)
+                
+                # Move to cooldown after successful spawn
+                self.state = "cooldown"
+                self.state_timer = 0
+            else:
+                # Optional: If you want the enemy to wait until the bomb explodes 
+                # before even starting the cooldown, do nothing here.
+                # Or, if you want them to teleport anyway:
+                self.state = "cooldown"
+                self.state_timer = 0
+            
+            self.state = "cooldown"
+            self.state_timer = 0
+
+        elif self.state == "cooldown":
+            # Wait before teleporting again
+            if self.state_timer >= self.teleport_cooldown:
+                self.state = "teleport"
+                self.state_timer = 0
+
 
     def enemy_mov(self, dt):
         self.vel += self.acc * dt
@@ -554,23 +1021,29 @@ class EnemySpawner(Serializable):
         data["spawned_enemies"] = [e.to_dict() for e in self.spawned_enemies]
         return data
 
-    def update(self, dt, multi):
+    def update(self, dt, multiplier, is_active):
+        # 1. Only progress spawn timer if the stage is ACTIVE
+        if not is_active:
+            return
+
         self.spawn_timer += dt
-        enemies = self.spawned_enemies
+
+        # 2. Update max enemies based on difficulty
+        # We use a base number * multiplier
+        current_max = int(10 * multiplier)
 
         if self.spawn_timer >= self.spawn_interval:
             self.spawn_timer = 0
-
-            if len(enemies) < self.max_enemies:
-                self.spawn_enemy(multi)
-
-        self.spawn_interval /= multi
-        self.max_enemies =  int(self.max_enemies*multi)
+            if len(self.spawned_enemies) < current_max:
+                self.spawn_enemy(multiplier)
 
     def spawn_enemy(self, multiplier):
-        x = random.randint(self.rectmap.left + 10, self.rectmap.right - 10)
-        y = random.randint(self.rectmap.top + 10, self.rectmap.bottom - 10)
-        enemy_type = random.choice(["melee"])
+        # Spawn within map boundaries
+        x = random.randint(self.rectmap.left + 50, self.rectmap.right - 50)
+        y = random.randint(self.rectmap.top + 50, self.rectmap.bottom - 50)
+        
+        # Randomly choose between types
+        enemy_type = random.choice(["melee", "range", "bomber"])
 
         enemy = Enemy(x, y, 50, 50, enemy_type)
         enemy.apply_difficulty(multiplier)
@@ -600,7 +1073,7 @@ class Item(Serializable):
         if self.destroyed:
             return
         
-        self.pos = pygame.Vector2(self.rect.x + camera.offset_x, self.rect.y + camera.offset_y)
+        self.pos = pygame.Vector2(self.rect.x - camera.offset_x, self.rect.y - camera.offset_y)
         self.rect.x, self.rect.y = self.pos
         pygame.draw.rect(SCREEN, self.color, self.rect)
 

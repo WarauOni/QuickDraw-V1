@@ -98,8 +98,8 @@ class Game():
             dt = clock.tick(60) / 1000  # ← THIS LINE
             events = pygame.event.get()
             enemies = []
-            self.difficulty.update(dt)
             self.difficulty.draw()
+            self.difficulty.update(dt, self.spawner.spawned_enemies)
             self.camera.camera_control(self.player, self.rectmap)
             
             # Handle input/events
@@ -122,7 +122,6 @@ class Game():
             self.player.draw_Object(self.rectmap)
             hit_pos, dmg = self.player.update(events)  # or player.update()
 
-
             self.items_spawn.update(dt)
             for item in self.items_spawn.spawned_items:
                 item.draw(self.camera)
@@ -133,13 +132,13 @@ class Game():
                 if item.destroyed:
                     self.items_spawn.spawned_items.remove(item)
 
-            multi = self.difficulty.multiplier()
-            self.spawner.update(dt, multi)
+            mult = self.difficulty.multiplier()
+            active = self.difficulty.state
+            self.spawner.update(dt, mult, active)
             enemies.extend(self.spawner.spawned_enemies)
             for enemy in enemies:
-                print("type",type(enemy), enemy)
                 enemy.draw(self.camera)
-                enemy.update(self.player, dt)
+                enemy.update(self.player, dt, self.camera)
 
 
                 for other in self.spawner.spawned_enemies:
@@ -157,6 +156,15 @@ class Game():
                     if self.player.rect.colliderect(bullet.rect):
                         self.player.take_dmg(bullet.dmg)
                         enemy.bullets.remove(bullet)
+
+                for bomb in enemy.bombs[:]:
+                    bomb.draw(self.camera)
+                    bomb.update(dt, self.player)
+                    if hit_pos:
+                        if not bomb.destroyed and bomb.rect.collidepoint(hit_pos):
+                            bomb.on_click()
+                    if bomb.destroyed:
+                        enemy.bombs.remove(bomb)
 
                 if hit_pos:
                     if not enemy.destroyed and enemy.rect.collidepoint(hit_pos):
@@ -177,6 +185,9 @@ class Game():
             
             if self.upgrade.show_menu:
                 self.upgrade.upgrade_menu(self.player)
+
+
+         
 
             snapshot = SCREEN.copy()
             pygame.display.flip()

@@ -273,7 +273,7 @@ class RectMap(BaseMap):
         self.rect = pygame.Rect(self.pos.x, self.pos.y, width, height)
 
     def draw(self, camera):
-        self.pos = self.rect.move(camera.offset_x, camera.offset_y)
+        self.pos = self.rect.move(-camera.offset_x, -camera.offset_y)
         self.rect.x, self.rect.y = self.pos.x, self.pos.y
 
         pygame.draw.rect(SCREEN, self.border_color, self.rect.inflate(self.border_size*2, self.border_size*2))
@@ -343,17 +343,18 @@ class Camera():
 
         # thrust force
         if keys[pygame.K_w]: 
-            if not entity.rect.top < self.rect.top:
+            if not entity.rect.bottom > self.rect.bottom: 
                 self.cam_spd_y -= self.cam_spd
         if keys[pygame.K_s]: 
-            if not entity.rect.bottom > self.rect.bottom: 
+            if not entity.rect.top < self.rect.top:
                 self.cam_spd_y += self.cam_spd
         if keys[pygame.K_a]: 
-            if not entity.rect.left < self.rect.left: 
+            if not entity.rect.right > self.rect.right:
                 self.cam_spd_x -= self.cam_spd
         if keys[pygame.K_d]: 
-            if not entity.rect.right > self.rect.right:
+            if not entity.rect.left < self.rect.left: 
                 self.cam_spd_x += self.cam_spd
+       
 
         
         self.offset_x = self.cam_spd_x 
